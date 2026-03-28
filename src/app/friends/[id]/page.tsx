@@ -130,15 +130,20 @@ export default function FriendDetail() {
             <p className="text-lg font-bold text-gray-300">All settled up!</p>
           ) : (
             balances.map((b) => (
-              <p
-                key={b.currency}
-                className={`text-lg font-bold ${b.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
-              >
-                {b.amount > 0
-                  ? `You owe ${getSymbol(b.currency)}${b.amount.toFixed(2)}`
-                  : `Owes you ${getSymbol(b.currency)}${Math.abs(b.amount).toFixed(2)}`
-                }
-              </p>
+              <div key={b.currency} className="flex justify-between items-center">
+                <p className={`text-lg font-bold ${b.amount > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                  {b.amount > 0
+                    ? `You owe ${getSymbol(b.currency)}${b.amount.toFixed(2)}`
+                    : `Owes you ${getSymbol(b.currency)}${Math.abs(b.amount).toFixed(2)}`
+                  }
+                </p>
+                <a
+                  href={`/friends/${friendId}/settle?from=${b.amount > 0 ? 'me' : friendId}&to=${b.amount > 0 ? friendId : 'me'}&fromName=${b.amount > 0 ? 'You' : encodeURIComponent(friend.name)}&toName=${b.amount > 0 ? encodeURIComponent(friend.name) : 'You'}&amount=${Math.abs(b.amount).toFixed(2)}&currency=${b.currency}`}
+                  className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                >
+                  Settle Up
+                </a>
+              </div>
             ))
           )}
         </div>

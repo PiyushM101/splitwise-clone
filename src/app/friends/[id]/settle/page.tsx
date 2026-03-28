@@ -1,62 +1,65 @@
 'use client'
 import { supabase } from '@/lib/supabase'
-import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
 
-const CURRENCIES: Record<string, string> = {
-  USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥',
-  CAD: 'C$', AUD: 'A$', CHF: 'Fr', KRW: '₩', SGD: 'S$', HKD: 'HK$',
-  NZD: 'NZ$', MXN: 'Mex$', BRL: 'R$', ARS: 'AR$', CLP: 'CL$',
-  COP: 'COL$', PEN: 'S/.', ZAR: 'R', NGN: '₦', KES: 'KSh',
-  EGP: 'E£', GHS: 'GH₵', MAD: 'MAD', AED: 'د.إ', SAR: '﷼',
-  QAR: 'QR', KWD: 'KD', BHD: 'BD', OMR: 'OMR', ILS: '₪',
-  TRY: '₺', RUB: '₽', PLN: 'zł', CZK: 'Kč', HUF: 'Ft',
-  SEK: 'kr', NOK: 'kr', DKK: 'kr', RON: 'lei', BGN: 'лв',
-  HRK: 'kn', THB: '฿', MYR: 'RM', IDR: 'Rp', PHP: '₱',
-  VND: '₫', TWD: 'NT$', PKR: '₨', BDT: '৳', LKR: 'Rs', NPR: 'रू',
-}
+const CURRENCIES = [
+  { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' },
+  { code: 'GBP', symbol: '£' }, { code: 'INR', symbol: '₹' },
+  { code: 'JPY', symbol: '¥' }, { code: 'CNY', symbol: '¥' },
+  { code: 'CAD', symbol: 'C$' }, { code: 'AUD', symbol: 'A$' },
+  { code: 'CHF', symbol: 'Fr' }, { code: 'KRW', symbol: '₩' },
+  { code: 'SGD', symbol: 'S$' }, { code: 'HKD', symbol: 'HK$' },
+  { code: 'NZD', symbol: 'NZ$' }, { code: 'MXN', symbol: 'Mex$' },
+  { code: 'BRL', symbol: 'R$' }, { code: 'ARS', symbol: 'AR$' },
+  { code: 'CLP', symbol: 'CL$' }, { code: 'COP', symbol: 'COL$' },
+  { code: 'PEN', symbol: 'S/.' }, { code: 'ZAR', symbol: 'R' },
+  { code: 'NGN', symbol: '₦' }, { code: 'KES', symbol: 'KSh' },
+  { code: 'EGP', symbol: 'E£' }, { code: 'GHS', symbol: 'GH₵' },
+  { code: 'MAD', symbol: 'MAD' }, { code: 'AED', symbol: 'د.إ' },
+  { code: 'SAR', symbol: '﷼' }, { code: 'QAR', symbol: 'QR' },
+  { code: 'KWD', symbol: 'KD' }, { code: 'BHD', symbol: 'BD' },
+  { code: 'OMR', symbol: 'OMR' }, { code: 'ILS', symbol: '₪' },
+  { code: 'TRY', symbol: '₺' }, { code: 'RUB', symbol: '₽' },
+  { code: 'PLN', symbol: 'zł' }, { code: 'CZK', symbol: 'Kč' },
+  { code: 'HUF', symbol: 'Ft' }, { code: 'SEK', symbol: 'kr' },
+  { code: 'NOK', symbol: 'kr' }, { code: 'DKK', symbol: 'kr' },
+  { code: 'RON', symbol: 'lei' }, { code: 'BGN', symbol: 'лв' },
+  { code: 'HRK', symbol: 'kn' }, { code: 'THB', symbol: '฿' },
+  { code: 'MYR', symbol: 'RM' }, { code: 'IDR', symbol: 'Rp' },
+  { code: 'PHP', symbol: '₱' }, { code: 'VND', symbol: '₫' },
+  { code: 'TWD', symbol: 'NT$' }, { code: 'PKR', symbol: '₨' },
+  { code: 'BDT', symbol: '৳' }, { code: 'LKR', symbol: 'Rs' },
+  { code: 'NPR', symbol: 'रू' },
+]
 
-const getSymbol = (code: string) => CURRENCIES[code] || code
+const getSymbol = (code: string) => CURRENCIES.find((c) => c.code === code)?.symbol || code
 
-export default function FriendSettle() {
-  const router = useRouter()
+export default function FriendSettlePage() {
+  const params = useParams()
+  const friendId = params.id as string
   const searchParams = useSearchParams()
-  const friendId = searchParams.get('to') === 'me' ? searchParams.get('from') : searchParams.get('to')
+  const router = useRouter()
 
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [fromName, setFromName] = useState('')
-  const [toName, setToName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState('USD')
+  const [amount, setAmount] = useState(searchParams.get('amount') || '')
+  const [currency, setCurrency] = useState(searchParams.get('currency') || 'USD')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    const fromParam = searchParams.get('from')
-    const toParam = searchParams.get('to')
-    const fromNameParam = searchParams.get('fromName')
-    const toNameParam = searchParams.get('toName')
-    const amountParam = searchParams.get('amount')
-    const currencyParam = searchParams.get('currency')
+  const fromName = searchParams.get('fromName') || 'Someone'
+  const toName = searchParams.get('toName') || 'Someone'
 
-    if (fromParam) setFrom(fromParam)
-    if (toParam) setTo(toParam)
-    if (fromNameParam) setFromName(decodeURIComponent(fromNameParam))
-    if (toNameParam) setToName(decodeURIComponent(toNameParam))
-    if (amountParam) setAmount(amountParam)
-    if (currencyParam) setCurrency(currencyParam)
-  }, [searchParams])
+  const symbol = getSymbol(currency)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSettle = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    const settlementAmount = parseFloat(amount)
-    if (isNaN(settlementAmount) || settlementAmount <= 0) {
+    const settleAmount = parseFloat(amount)
+    if (isNaN(settleAmount) || settleAmount <= 0) {
       setError('Enter a valid amount.')
       setLoading(false)
       return
@@ -65,69 +68,51 @@ export default function FriendSettle() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    // Determine who is paying whom
-    const paidBy = from === 'me' ? session.user.id : from
-    const paidTo = to === 'me' ? session.user.id : to
+    const fromParam = searchParams.get('from')
+    const toParam = searchParams.get('to')
 
-    // Create settlement record
-    const { error: settlementError } = await supabase
+    const paidBy = fromParam === 'me' ? session.user.id : friendId
+    const paidTo = toParam === 'me' ? session.user.id : friendId
+
+    // Allow settlements without a group_id
+    const { error: settleError } = await supabase
       .from('settlements')
       .insert({
-        group_id: null, // Friend settlements don't belong to a group
+        group_id: null,
         paid_by: paidBy,
         paid_to: paidTo,
-        amount: settlementAmount,
+        amount: settleAmount,
         currency,
         date,
       })
 
-    if (settlementError) {
-      setError(settlementError.message)
+    if (settleError) {
+      setError(settleError.message)
       setLoading(false)
       return
     }
 
-    router.push('/dashboard')
+    router.push(`/friends/${friendId}`)
   }
-
-  const symbol = getSymbol(currency)
 
   return (
     <AuthGuard>
       <div className="max-w-md mx-auto">
         <a href={`/friends/${friendId}`} className="text-purple-600 hover:underline text-sm">
-          &larr; Back to {toName}
+          &larr; Back to Friend
         </a>
 
         <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-6">Settle Up</h1>
 
         <div className="bg-purple-50 rounded p-4 mb-6">
-          <p className="text-sm text-gray-600">
-            {fromName} pays {toName} {symbol}{amount}
+          <p className="text-sm text-gray-700">
+            <span className="font-medium text-red-500">{fromName}</span>
+            {' pays '}
+            <span className="font-medium text-green-600">{toName}</span>
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
-            <input
-              type="text"
-              value={fromName}
-              readOnly
-              className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-            <input
-              type="text"
-              value={toName}
-              readOnly
-              className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50"
-            />
-          </div>
-
+        <form onSubmit={handleSettle} className="space-y-4">
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
@@ -148,8 +133,8 @@ export default function FriendSettle() {
                 onChange={(e) => setCurrency(e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                {Object.entries(CURRENCIES).map(([code, sym]) => (
-                  <option key={code} value={code}>{sym} {code}</option>
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
                 ))}
               </select>
             </div>
@@ -170,9 +155,9 @@ export default function FriendSettle() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-800 disabled:opacity-50"
+            className="w-full bg-purple-700 text-white py-2 rounded hover:bg-purple-800 disabled:opacity-50"
           >
-            {loading ? 'Recording...' : 'Record Payment'}
+            {loading ? 'Recording...' : `Record ${symbol}${amount || '0.00'} Payment`}
           </button>
         </form>
       </div>
