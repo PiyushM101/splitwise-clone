@@ -31,6 +31,15 @@ export default function Dashboard() {
   const [owedToYou, setOwedToYou] = useState<{ currency: string; amount: number }[]>([])
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([])
   const [loading, setLoading] = useState(true)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showAddMenu) setShowAddMenu(false)
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [showAddMenu])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -173,18 +182,49 @@ export default function Dashboard() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-purple-700">Dashboard</h1>
           <div className="flex gap-2">
-            <a
-              href="/expenses/new"
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              + Friend Expense
-            </a>
-            <a
-              href="/groups/new"
-              className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
-            >
-              + New Group
-            </a>
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowAddMenu(!showAddMenu) }}
+                className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
+              >
+                + Add Expense
+              </button>
+              {showAddMenu && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  {groups.length > 0 && (
+                    <div>
+                      <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Groups</p>
+                      {groups.map((group) => (
+                        <a
+                          key={group.id}
+                          href={`/groups/${group.id}/new`}
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                        >
+                          {group.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="border-t border-gray-100">
+                    <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">Friends</p>
+                    <a
+                      href="/expenses/new"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                    >
+                      + Add with a friend
+                    </a>
+                  </div>
+                  <div className="border-t border-gray-100">
+                    <a
+                      href="/groups/new"
+                      className="block px-4 py-2 text-sm text-purple-600 hover:bg-purple-50"
+                    >
+                      + Create new group
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
