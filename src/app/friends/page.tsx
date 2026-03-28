@@ -89,6 +89,25 @@ export default function FriendsPage() {
     setError('')
     setSuccess('')
 
+    // Check if friendship exists in either direction
+    const { data: existing } = await supabase
+      .from('friendships')
+      .select('id, status')
+      .or(
+        `and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`
+      )
+
+    if (existing && existing.length > 0) {
+      if (existing.some((f) => f.status === 'accepted')) {
+        setError('You are already friends!')
+        return
+      }
+      if (existing.some((f) => f.status === 'pending')) {
+        setError('A friend request already exists.')
+        return
+      }
+    }
+
     const { error: reqError } = await supabase
       .from('friendships')
       .insert({ user_id: currentUserId, friend_id: friendId, status: 'pending' })
