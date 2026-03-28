@@ -37,7 +37,7 @@ export default function GroupDetail() {
   const [expenses, setExpenses] = useState<any[]>([])
   const [balances, setBalances] = useState<Balance[]>([])
   const [simplifiedBalances, setSimplifiedBalances] = useState<Balance[]>([])
-  const [showSimplified, setShowSimplified] = useState(false)
+  const [showSimplified, setShowSimplified] = useState(true)
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
