@@ -346,7 +346,27 @@ export default function GroupDetail() {
         f.user_id === session.user.id ? f.friend_id : f.user_id
       )
 
-      if (friendIds.length === 0) {
+      // Also get group member IDs from all my groups
+      const { data: myGroups } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', session.user.id)
+
+      let groupMemberIds: string[] = []
+      if (myGroups && myGroups.length > 0) {
+        const allGroupIds = myGroups.map((g) => g.group_id)
+        const { data: groupMembers } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .in('group_id', allGroupIds)
+          .neq('user_id', session.user.id)
+
+        groupMemberIds = (groupMembers || []).map((m) => m.user_id)
+      }
+
+      const allKnownIds = [...new Set([...friendIds, ...groupMemberIds])]
+
+      if (allKnownIds.length === 0) {
         setSuggestions([])
         return
       }
@@ -354,7 +374,7 @@ export default function GroupDetail() {
       const { data } = await supabase
         .from('profiles')
         .select('id, name, email')
-        .in('id', friendIds)
+        .in('id', allKnownIds)
         .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
         .limit(5)
 
