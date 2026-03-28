@@ -228,23 +228,21 @@ export default function Dashboard() {
         ) : (
           <ul className="space-y-2 mb-8">
             {friendBalances.map((friend) => (
-              <li key={friend.userId} className="border border-gray-200 rounded p-3 flex justify-between items-center hover:bg-gray-50 cursor-pointer">
-                <a href={`/friends/${friend.userId}`} className="flex justify-between items-center w-full">
-                  <span className="font-medium text-gray-800">{friend.name}</span>
-                  <div className="text-right">
-                    {friend.amounts.map((a) => (
-                      <p
-                        key={a.currency}
-                        className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
-                      >
-                        {a.amount > 0
-                          ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
-                          : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
-                        }
-                      </p>
-                    ))}
-                  </div>
-                </a>
+              <li key={friend.userId} className="border border-gray-200 rounded p-3 flex justify-between items-center">
+                <a href={`/friends/${friend.userId}`} className="font-medium text-purple-700 hover:underline">{friend.name}</a>
+                <div className="text-right">
+                  {friend.amounts.map((a) => (
+                    <p
+                      key={a.currency}
+                      className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
+                    >
+                      {a.amount > 0
+                        ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
+                        : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
+                      }
+                    </p>
+                  ))}
+                </div>
               </li>
             ))}
           </ul>
