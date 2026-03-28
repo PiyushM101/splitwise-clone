@@ -96,14 +96,53 @@ export default function EditExpense() {
       setPaidBy(expense.paid_by)
       const rawDate = expense.date as string
       setDate(typeof rawDate === 'string' ? rawDate.slice(0, 10) : '')
+
       const splits = (expense.expense_splits as any[]) || []
       setSplitWith(splits.map((s: any) => s.user_id))
 
-      const exactDefaults: Record<string, string> = {}
-      splits.forEach((s: any) => {
-        exactDefaults[s.user_id] = parseFloat(String(s.amount_owed)).toString()
-      })
-      setExactAmounts((prev) => ({ ...prev, ...exactDefaults }))
+      const method = (expense.split_method as SplitMethod) || 'equal'
+      setSplitMethod(method)
+
+      const totalAmount = parseFloat(String(expense.amount))
+
+      if (method === 'exact' || method === 'equal') {
+        const exactDefaults: Record<string, string> = {}
+        splits.forEach((s: any) => {
+          exactDefaults[s.user_id] = parseFloat(String(s.amount_owed)).toString()
+        })
+        setExactAmounts((prev) => ({ ...prev, ...exactDefaults }))
+      }
+
+      if (method === 'percentage' && totalAmount > 0) {
+        const pctDefaults: Record<string, string> = {}
+        splits.forEach((s: any) => {
+          pctDefaults[s.user_id] = ((parseFloat(String(s.amount_owed)) / totalAmount) * 100).toFixed(2)
+        })
+        setPercentages((prev) => ({ ...prev, ...pctDefaults }))
+      }
+
+      if (method === 'shares' && splits.length > 0) {
+        const amounts = splits.map((s: any) => parseFloat(String(s.amount_owed)))
+        const minAmount = Math.min(...amounts)
+        const shareDefaults: Record<string, string> = {}
+        if (minAmount > 0) {
+          splits.forEach((s: any) => {
+            shareDefaults[s.user_id] = Math.round(parseFloat(String(s.amount_owed)) / minAmount).toString()
+          })
+          setShares((prev) => ({ ...prev, ...shareDefaults }))
+        }
+      }
+
+      if (method === 'adjustments' && splits.length > 0) {
+        const owed = splits.map((s: any) => parseFloat(String(s.amount_owed)))
+        const minOwed = Math.min(...owed)
+        const adjDefaults: Record<string, string> = {}
+        splits.forEach((s: any) => {
+          const adj = parseFloat(String(s.amount_owed)) - minOwed
+          adjDefaults[s.user_id] = adj > 0 ? adj.toFixed(2) : '0'
+        })
+        setAdjustments((prev) => ({ ...prev, ...adjDefaults }))
+      }
     }
 
     setPageLoading(false)
@@ -236,6 +275,7 @@ export default function EditExpense() {
         currency,
         paid_by: paidBy,
         date,
+        split_method: splitMethod,
       })
       .eq('id', expenseId)
 

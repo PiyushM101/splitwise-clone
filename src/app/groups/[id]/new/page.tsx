@@ -222,6 +222,7 @@ export default function NewExpense() {
         paid_by: paidBy,
         created_by: session.user.id,
         date,
+        split_method: splitMethod,
       })
       .select()
       .single()
