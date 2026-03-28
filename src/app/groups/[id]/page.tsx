@@ -19,6 +19,15 @@ const CURRENCIES: Record<string, string> = {
 
 const getSymbol = (code: string) => CURRENCIES[code] || code
 
+type Balance = {
+  from: string
+  fromName: string
+  to: string
+  toName: string
+  amount: number
+  currency: string
+}
+
 export default function GroupDetail() {
   const params = useParams()
   const groupId = params.id as string
@@ -26,10 +35,81 @@ export default function GroupDetail() {
   const [group, setGroup] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
+  const [balances, setBalances] = useState<Balance[]>([])
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
+
+  const calculateBalances = useCallback((expenseList: any[], memberList: any[]) => {
+    const debtsByCurrency: Record<string, Record<string, Record<string, number>>> = {}
+
+    for (const expense of expenseList) {
+      const currency = expense.currency
+      if (!debtsByCurrency[currency]) debtsByCurrency[currency] = {}
+
+      const paidBy = expense.paid_by
+
+      for (const split of expense.expense_splits || []) {
+        if (split.user_id === paidBy) continue
+
+        const owedAmount = parseFloat(split.amount_owed)
+        if (!debtsByCurrency[currency][split.user_id]) {
+          debtsByCurrency[currency][split.user_id] = {}
+        }
+        if (!debtsByCurrency[currency][split.user_id][paidBy]) {
+          debtsByCurrency[currency][split.user_id][paidBy] = 0
+        }
+        debtsByCurrency[currency][split.user_id][paidBy] += owedAmount
+      }
+    }
+
+    const nameMap: Record<string, string> = {}
+    for (const m of memberList) {
+      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+    }
+
+    const result: Balance[] = []
+
+    for (const currency of Object.keys(debtsByCurrency)) {
+      const debts = debtsByCurrency[currency]
+      const processed = new Set<string>()
+
+      for (const from of Object.keys(debts)) {
+        for (const to of Object.keys(debts[from])) {
+          const key = [from, to].sort().join('-')
+          if (processed.has(key)) continue
+          processed.add(key)
+
+          const fromOwesTo = debts[from]?.[to] || 0
+          const toOwesFrom = debts[to]?.[from] || 0
+          const net = Math.round((fromOwesTo - toOwesFrom) * 100) / 100
+
+          if (net > 0) {
+            result.push({
+              from,
+              fromName: nameMap[from] || 'Unknown',
+              to,
+              toName: nameMap[to] || 'Unknown',
+              amount: net,
+              currency,
+            })
+          } else if (net < 0) {
+            result.push({
+              from: to,
+              fromName: nameMap[to] || 'Unknown',
+              to: from,
+              toName: nameMap[from] || 'Unknown',
+              amount: Math.abs(net),
+              currency,
+            })
+          }
+        }
+      }
+    }
+
+    setBalances(result)
+  }, [])
 
   const fetchGroup = useCallback(async () => {
     const { data: groupData } = await supabase
@@ -51,23 +131,24 @@ export default function GroupDetail() {
       .from('expenses')
       .select('*, profiles!paid_by(name, email), expense_splits(user_id, amount_owed, profiles(name, email))')
       .eq('group_id', groupId)
-      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
 
     setExpenses(expenseData || [])
+    calculateBalances(expenseData || [], memberData || [])
     setLoading(false)
-  }, [groupId])
+  }, [groupId, calculateBalances])
 
   useEffect(() => {
     fetchGroup()
   }, [fetchGroup])
 
-  const handleDelete = async (expenseId: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return
+  const handleDelete = useCallback(async (expenseId: string) => {
+    if (!window.confirm('Are you sure you want to delete this expense?')) return
 
     await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
     await supabase.from('expenses').delete().eq('id', expenseId)
     fetchGroup()
-  }
+  }, [fetchGroup])
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,6 +195,29 @@ export default function GroupDetail() {
         <a href="/dashboard" className="text-purple-600 hover:underline text-sm">&larr; Back to Dashboard</a>
 
         <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-6">{group.name}</h1>
+
+        {/* Balances */}
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Balances</h2>
+          {balances.length === 0 ? (
+            <p className="text-gray-400 text-sm">All settled up!</p>
+          ) : (
+            <ul className="space-y-2">
+              {balances.map((b, i) => (
+                <li key={i} className="border border-gray-200 rounded p-3 flex justify-between items-center">
+                  <p className="text-sm text-gray-700">
+                    <span className="text-red-500 font-medium">{b.fromName}</span>
+                    {' owes '}
+                    <span className="text-green-600 font-medium">{b.toName}</span>
+                  </p>
+                  <p className="font-bold text-purple-700">
+                    {getSymbol(b.currency)}{b.amount.toFixed(2)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {/* Members list */}
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Members</h2>
