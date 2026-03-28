@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { ensureFriendship } from '@/lib/friends'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' },
@@ -329,6 +330,11 @@ export default function NewFriendExpense() {
       setError(splitError.message)
       setLoading(false)
       return
+    }
+
+    // Auto-friend all involved people
+    for (const friend of selectedFriends) {
+      await ensureFriendship(session.user.id, friend.id)
     }
 
     router.push('/dashboard')
