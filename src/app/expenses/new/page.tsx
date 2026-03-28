@@ -48,7 +48,43 @@ export default function NewFriendExpense() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedFriend, setSelectedFriend] = useState<any>(null)
+
   const symbol = getSymbol(currency)
+
+  useEffect(() => {
+    const searchFriends = async () => {
+      if (friendEmail.length < 2) {
+        setSuggestions([])
+        return
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .neq('id', session.user.id)
+        .or(`email.ilike.%${friendEmail}%,name.ilike.%${friendEmail}%`)
+        .limit(5)
+
+      setSuggestions(data || [])
+      setShowSuggestions(true)
+    }
+
+    const timer = setTimeout(searchFriends, 300)
+    return () => clearTimeout(timer)
+  }, [friendEmail])
+
+  const selectFriend = (friend: any) => {
+    setFriendEmail(friend.email)
+    setSelectedFriend(friend)
+    setShowSuggestions(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,29 +101,32 @@ export default function NewFriendExpense() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    // Find the friend
-    const { data: friend } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .eq('email', friendEmail)
-      .single()
+    // Use selected friend or search by email
+    let friendId = selectedFriend?.id
+    if (!friendId) {
+      const { data: friend } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', friendEmail)
+        .single()
 
-    if (!friend) {
-      setError('No user found with that email.')
-      setLoading(false)
-      return
+      if (!friend) {
+        setError('No user found with that email.')
+        setLoading(false)
+        return
+      }
+      friendId = friend.id
     }
 
-    if (friend.id === session.user.id) {
+    if (friendId === session.user.id) {
       setError("You can't add an expense with yourself.")
       setLoading(false)
       return
     }
 
-    const paidBy = whoPaid === 'me' ? session.user.id : friend.id
+    const paidBy = whoPaid === 'me' ? session.user.id : friendId
     const splitAmount = Math.round((totalAmount / 2) * 100) / 100
 
-    // Create the expense without a group
     const { data: expense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
@@ -109,7 +148,6 @@ export default function NewFriendExpense() {
       return
     }
 
-    // Split equally between you and friend
     const splits = [
       {
         expense_id: expense.id,
@@ -118,7 +156,7 @@ export default function NewFriendExpense() {
       },
       {
         expense_id: expense.id,
-        user_id: friend.id,
+        user_id: friendId,
         amount_owed: Math.round((totalAmount - splitAmount) * 100) / 100,
       },
     ]
@@ -146,16 +184,56 @@ export default function NewFriendExpense() {
         <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-6">Add Friend Expense</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Friend's Email</label>
-            <input
-              type="email"
-              value={friendEmail}
-              onChange={(e) => setFriendEmail(e.target.value)}
-              placeholder="friend@example.com"
-              required
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Friend</label>
+            {selectedFriend ? (
+              <div className="flex items-center justify-between border border-purple-300 bg-purple-50 rounded px-3 py-2">
+                <div>
+                  <span className="font-medium text-purple-700">{selectedFriend.name}</span>
+                  <span className="text-gray-400 text-sm ml-2">{selectedFriend.email}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFriend(null)
+                    setFriendEmail('')
+                  }}
+                  className="text-gray-400 hover:text-red-500 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={friendEmail}
+                  onChange={(e) => {
+                    setFriendEmail(e.target.value)
+                    setSelectedFriend(null)
+                  }}
+                  onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                  placeholder="Search by name or email"
+                  required
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                    {suggestions.map((person) => (
+                      <button
+                        key={person.id}
+                        type="button"
+                        onClick={() => selectFriend(person)}
+                        className="w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <p className="text-sm font-medium text-gray-800">{person.name}</p>
+                        <p className="text-xs text-gray-400">{person.email}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div>
