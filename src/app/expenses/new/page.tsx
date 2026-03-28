@@ -128,7 +128,7 @@ export default function NewFriendExpense() {
 
       const selectedIds = selectedFriends.map((f) => f.id)
 
-      // Get only accepted friends
+      // Get friend IDs
       const { data: friendships } = await supabase
         .from('friendships')
         .select('user_id, friend_id')
@@ -139,7 +139,28 @@ export default function NewFriendExpense() {
         f.user_id === session.user.id ? f.friend_id : f.user_id
       )
 
-      if (friendIds.length === 0) {
+      // Also get group member IDs
+      const { data: myGroups } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', session.user.id)
+
+      let groupMemberIds: string[] = []
+      if (myGroups && myGroups.length > 0) {
+        const groupIds = myGroups.map((g) => g.group_id)
+        const { data: groupMembers } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .in('group_id', groupIds)
+          .neq('user_id', session.user.id)
+
+        groupMemberIds = (groupMembers || []).map((m) => m.user_id)
+      }
+
+      // Combine and deduplicate
+      const allKnownIds = [...new Set([...friendIds, ...groupMemberIds])]
+
+      if (allKnownIds.length === 0) {
         setSuggestions([])
         setShowSuggestions(false)
         return
@@ -148,7 +169,7 @@ export default function NewFriendExpense() {
       const { data } = await supabase
         .from('profiles')
         .select('id, name, email')
-        .in('id', friendIds)
+        .in('id', allKnownIds)
         .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
         .limit(5)
 
