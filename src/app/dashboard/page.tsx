@@ -71,11 +71,10 @@ export default function Dashboard() {
 
         const expenses = [...(groupExpenses || []), ...(friendExpenses || [])]
 
-        // Get all settlements in user's groups
+        // Get all settlements (group and non-group)
         const { data: settlements } = await supabase
           .from('settlements')
           .select('*')
-          .in('group_id', groupIds)
 
         // Get all profiles for names
         const { data: profiles } = await supabase
