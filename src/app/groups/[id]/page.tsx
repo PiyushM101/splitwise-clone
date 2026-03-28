@@ -1,6 +1,6 @@
 'use client'
 import { supabase } from '@/lib/supabase'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
 
@@ -36,15 +36,100 @@ export default function GroupDetail() {
   const [members, setMembers] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
   const [balances, setBalances] = useState<Balance[]>([])
+  const [simplifiedBalances, setSimplifiedBalances] = useState<Balance[]>([])
+  const [showSimplified, setShowSimplified] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const calculateBalances = useCallback((expenseList: any[], memberList: any[]) => {
+  const handleDelete = async (expenseId: string) => {
+    if (!window.confirm('Are you sure you want to delete this expense?')) return
+
+    await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
+    await supabase.from('expenses').delete().eq('id', expenseId)
+    fetchGroup()
+  }
+
+  const simplifyDebts = (balances: Balance[], members: any[]): Balance[] => {
+    const nameMap: Record<string, string> = {}
+    for (const m of members) {
+      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+    }
+
+    // Group by currency
+    const byCurrency: Record<string, Balance[]> = {}
+    for (const b of balances) {
+      if (!byCurrency[b.currency]) byCurrency[b.currency] = []
+      byCurrency[b.currency].push(b)
+    }
+
+    const result: Balance[] = []
+
+    for (const currency of Object.keys(byCurrency)) {
+      // Calculate net balance for each person
+      const netBalance: Record<string, number> = {}
+
+      for (const b of byCurrency[currency]) {
+        if (!netBalance[b.from]) netBalance[b.from] = 0
+        if (!netBalance[b.to]) netBalance[b.to] = 0
+        netBalance[b.from] -= b.amount
+        netBalance[b.to] += b.amount
+      }
+
+      // Separate into debtors and creditors
+      const debtors: { id: string; amount: number }[] = []
+      const creditors: { id: string; amount: number }[] = []
+
+      for (const [id, balance] of Object.entries(netBalance)) {
+        const rounded = Math.round(balance * 100) / 100
+        if (rounded < 0) {
+          debtors.push({ id, amount: Math.abs(rounded) })
+        } else if (rounded > 0) {
+          creditors.push({ id, amount: rounded })
+        }
+      }
+
+      // Sort both by amount descending
+      debtors.sort((a, b) => b.amount - a.amount)
+      creditors.sort((a, b) => b.amount - a.amount)
+
+      // Match debtors with creditors
+      let i = 0
+      let j = 0
+
+      while (i < debtors.length && j < creditors.length) {
+        const debtor = debtors[i]
+        const creditor = creditors[j]
+        const transfer = Math.min(debtor.amount, creditor.amount)
+        const rounded = Math.round(transfer * 100) / 100
+
+        if (rounded > 0) {
+          result.push({
+            from: debtor.id,
+            fromName: nameMap[debtor.id] || 'Unknown',
+            to: creditor.id,
+            toName: nameMap[creditor.id] || 'Unknown',
+            amount: rounded,
+            currency,
+          })
+        }
+
+        debtor.amount -= transfer
+        creditor.amount -= transfer
+
+        if (Math.round(debtor.amount * 100) === 0) i++
+        if (Math.round(creditor.amount * 100) === 0) j++
+      }
+    }
+
+    return result
+  }
+
+  const calculateBalances = (expenses: any[], members: any[], settlements: any[]) => {
     const debtsByCurrency: Record<string, Record<string, Record<string, number>>> = {}
 
-    for (const expense of expenseList) {
+    for (const expense of expenses) {
       const currency = expense.currency
       if (!debtsByCurrency[currency]) debtsByCurrency[currency] = {}
 
@@ -64,8 +149,30 @@ export default function GroupDetail() {
       }
     }
 
+    // Subtract settlements
+    for (const settlement of settlements) {
+      const currency = settlement.currency
+      const from = settlement.paid_by
+      const to = settlement.paid_to
+      const amount = parseFloat(settlement.amount)
+
+      if (!debtsByCurrency[currency]) continue
+      if (debtsByCurrency[currency][from]?.[to]) {
+        debtsByCurrency[currency][from][to] -= amount
+        if (debtsByCurrency[currency][from][to] <= 0) {
+          const overpay = Math.abs(debtsByCurrency[currency][from][to])
+          delete debtsByCurrency[currency][from][to]
+          if (overpay > 0) {
+            if (!debtsByCurrency[currency][to]) debtsByCurrency[currency][to] = {}
+            if (!debtsByCurrency[currency][to][from]) debtsByCurrency[currency][to][from] = 0
+            debtsByCurrency[currency][to][from] += overpay
+          }
+        }
+      }
+    }
+
     const nameMap: Record<string, string> = {}
-    for (const m of memberList) {
+    for (const m of members) {
       nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
     }
 
@@ -109,9 +216,10 @@ export default function GroupDetail() {
     }
 
     setBalances(result)
-  }, [])
+    setSimplifiedBalances(simplifyDebts(result, members))
+  }
 
-  const fetchGroup = useCallback(async () => {
+  const fetchGroup = async () => {
     const { data: groupData } = await supabase
       .from('groups')
       .select('*')
@@ -133,22 +241,19 @@ export default function GroupDetail() {
       .eq('group_id', groupId)
       .order('created_at', { ascending: false })
 
+    const { data: settlementData } = await supabase
+      .from('settlements')
+      .select('*')
+      .eq('group_id', groupId)
+
     setExpenses(expenseData || [])
-    calculateBalances(expenseData || [], memberData || [])
+    calculateBalances(expenseData || [], memberData || [], settlementData || [])
     setLoading(false)
-  }, [groupId, calculateBalances])
+  }
 
   useEffect(() => {
     fetchGroup()
-  }, [fetchGroup])
-
-  const handleDelete = useCallback(async (expenseId: string) => {
-    if (!window.confirm('Are you sure you want to delete this expense?')) return
-
-    await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
-    await supabase.from('expenses').delete().eq('id', expenseId)
-    fetchGroup()
-  }, [fetchGroup])
+  }, [groupId])
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -189,6 +294,8 @@ export default function GroupDetail() {
   if (loading) return <p className="p-8">Loading...</p>
   if (!group) return <p className="p-8">Group not found.</p>
 
+  const displayBalances = showSimplified ? simplifiedBalances : balances
+
   return (
     <AuthGuard>
       <div>
@@ -198,21 +305,50 @@ export default function GroupDetail() {
 
         {/* Balances */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-700 mb-3">Balances</h2>
-          {balances.length === 0 ? (
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-semibold text-gray-700">Balances</h2>
+            {balances.length > 0 && (
+              <button
+                onClick={() => setShowSimplified(!showSimplified)}
+                className={`text-xs px-3 py-1 rounded ${
+                  showSimplified
+                    ? 'bg-purple-700 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {showSimplified ? 'Showing Simplified' : 'Simplify Debts'}
+              </button>
+            )}
+          </div>
+
+          {showSimplified && balances.length > 0 && (
+            <p className="text-xs text-gray-400 mb-3">
+              Reduced from {balances.length} payment{balances.length !== 1 ? 's' : ''} to {simplifiedBalances.length} payment{simplifiedBalances.length !== 1 ? 's' : ''}.
+            </p>
+          )}
+
+          {displayBalances.length === 0 ? (
             <p className="text-gray-400 text-sm">All settled up!</p>
           ) : (
             <ul className="space-y-2">
-              {balances.map((b, i) => (
+              {displayBalances.map((b, i) => (
                 <li key={i} className="border border-gray-200 rounded p-3 flex justify-between items-center">
                   <p className="text-sm text-gray-700">
                     <span className="text-red-500 font-medium">{b.fromName}</span>
                     {' owes '}
                     <span className="text-green-600 font-medium">{b.toName}</span>
                   </p>
-                  <p className="font-bold text-purple-700">
-                    {getSymbol(b.currency)}{b.amount.toFixed(2)}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="font-bold text-purple-700">
+                      {getSymbol(b.currency)}{b.amount.toFixed(2)}
+                    </p>
+                    <a
+                      href={`/groups/${groupId}/settle?from=${b.from}&to=${b.to}&fromName=${encodeURIComponent(b.fromName)}&toName=${encodeURIComponent(b.toName)}&amount=${b.amount.toFixed(2)}&currency=${b.currency}`}
+                      className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                    >
+                      Settle Up
+                    </a>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -302,7 +438,6 @@ export default function GroupDetail() {
                             Edit
                           </a>
                           <button
-                            type="button"
                             onClick={() => handleDelete(expense.id)}
                             className="text-xs text-red-500 hover:underline"
                           >
@@ -312,7 +447,6 @@ export default function GroupDetail() {
                       </div>
                     </div>
 
-                    {/* Split details */}
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <p className="text-xs text-gray-400 mb-2">Split between:</p>
                       <div className="flex flex-wrap gap-2">
