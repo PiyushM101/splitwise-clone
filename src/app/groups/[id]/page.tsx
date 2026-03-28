@@ -53,7 +53,10 @@ export default function GroupDetail() {
   const [showSimplified, setShowSimplified] = useState(true)
   const [groupTotals, setGroupTotals] = useState<SpendingTotal[]>([])
   const [personSpending, setPersonSpending] = useState<PersonSpending[]>([])
-  const [newEmail, setNewEmail] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [suggestions, setSuggestions] = useState<any[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [selectedPerson, setSelectedPerson] = useState<any>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
@@ -320,23 +323,59 @@ export default function GroupDetail() {
     fetchGroup()
   }, [groupId])
 
+  useEffect(() => {
+    const searchPeople = async () => {
+      if (searchQuery.length < 2) {
+        setSuggestions([])
+        return
+      }
+
+      const memberIds = members.map((m) => m.user_id)
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
+        .limit(5)
+
+      const filtered = (data || []).filter((p) => !memberIds.includes(p.id))
+      setSuggestions(filtered)
+      setShowSuggestions(true)
+    }
+
+    const timer = setTimeout(searchPeople, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery, members])
+
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccess('')
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .eq('email', newEmail)
-      .single()
+    let profileId = selectedPerson?.id
+    let profileEmail = selectedPerson?.email
 
-    if (!profile) {
-      setError('No user found with that email.')
+    if (!profileId && searchQuery) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', searchQuery)
+        .single()
+
+      if (!profile) {
+        setError('No user found with that email.')
+        return
+      }
+      profileId = profile.id
+      profileEmail = profile.email
+    }
+
+    if (!profileId) {
+      setError('Select a person to add.')
       return
     }
 
-    const alreadyMember = members.some((m) => m.user_id === profile.id)
+    const alreadyMember = members.some((m) => m.user_id === profileId)
     if (alreadyMember) {
       setError('This person is already in the group.')
       return
@@ -344,15 +383,17 @@ export default function GroupDetail() {
 
     const { error: addError } = await supabase
       .from('group_members')
-      .insert({ group_id: groupId, user_id: profile.id })
+      .insert({ group_id: groupId, user_id: profileId })
 
     if (addError) {
       setError(addError.message)
       return
     }
 
-    setSuccess(`Added ${profile.email} to the group!`)
-    setNewEmail('')
+    setSuccess(`Added ${profileEmail} to the group!`)
+    setSearchQuery('')
+    setSelectedPerson(null)
+    setShowSuggestions(false)
     fetchGroup()
   }
 
@@ -512,21 +553,74 @@ export default function GroupDetail() {
 
         {/* Add member */}
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Add a Member</h2>
-        <form onSubmit={handleAddMember} className="flex gap-3 mb-10">
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="Enter their email"
-            required
-            className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-          <button
-            type="submit"
-            className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
-          >
-            Add
-          </button>
+        <form onSubmit={handleAddMember} className="mb-10">
+          {selectedPerson ? (
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex-1 flex items-center justify-between border border-purple-300 bg-purple-50 rounded px-3 py-2">
+                <div>
+                  <span className="font-medium text-purple-700">{selectedPerson.name}</span>
+                  <span className="text-gray-400 text-sm ml-2">{selectedPerson.email}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPerson(null)
+                    setSearchQuery('')
+                  }}
+                  className="text-gray-400 hover:text-red-500 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+              <button
+                type="submit"
+                className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setSelectedPerson(null)
+                  }}
+                  onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                  placeholder="Search by name or email"
+                  className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  type="submit"
+                  className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
+                >
+                  Add
+                </button>
+              </div>
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  {suggestions.map((person) => (
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPerson(person)
+                        setSearchQuery(person.email)
+                        setShowSuggestions(false)
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
+                    >
+                      <p className="text-sm font-medium text-gray-800">{person.name}</p>
+                      <p className="text-xs text-gray-400">{person.email}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </form>
 
         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
