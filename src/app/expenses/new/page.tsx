@@ -127,10 +127,27 @@ export default function NewFriendExpense() {
 
       const selectedIds = selectedFriends.map((f) => f.id)
 
+      // Get only accepted friends
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${session.user.id},friend_id.eq.${session.user.id}`)
+        .eq('status', 'accepted')
+
+      const friendIds = (friendships || []).map((f) =>
+        f.user_id === session.user.id ? f.friend_id : f.user_id
+      )
+
+      if (friendIds.length === 0) {
+        setSuggestions([])
+        setShowSuggestions(false)
+        return
+      }
+
       const { data } = await supabase
         .from('profiles')
         .select('id, name, email')
-        .neq('id', session.user.id)
+        .in('id', friendIds)
         .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
         .limit(5)
 

@@ -332,9 +332,28 @@ export default function GroupDetail() {
 
       const memberIds = members.map((m) => m.user_id)
 
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const { data: friendships } = await supabase
+        .from('friendships')
+        .select('user_id, friend_id')
+        .or(`user_id.eq.${session.user.id},friend_id.eq.${session.user.id}`)
+        .eq('status', 'accepted')
+
+      const friendIds = (friendships || []).map((f) =>
+        f.user_id === session.user.id ? f.friend_id : f.user_id
+      )
+
+      if (friendIds.length === 0) {
+        setSuggestions([])
+        return
+      }
+
       const { data } = await supabase
         .from('profiles')
         .select('id, name, email')
+        .in('id', friendIds)
         .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
         .limit(5)
 
