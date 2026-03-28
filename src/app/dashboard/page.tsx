@@ -230,17 +230,28 @@ export default function Dashboard() {
             {friendBalances.map((friend) => (
               <li key={friend.userId} className="border border-gray-200 rounded p-3 flex justify-between items-center">
                 <a href={`/friends/${friend.userId}`} className="font-medium text-purple-700 hover:underline">{friend.name}</a>
-                <div className="text-right">
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    {friend.amounts.map((a) => (
+                      <p
+                        key={a.currency}
+                        className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
+                      >
+                        {a.amount > 0
+                          ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
+                          : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
+                        }
+                      </p>
+                    ))}
+                  </div>
                   {friend.amounts.map((a) => (
-                    <p
-                      key={a.currency}
-                      className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
+                    <a
+                      key={`settle-${a.currency}`}
+                      href={`/friends/${friend.userId}/settle?from=${a.amount > 0 ? 'me' : friend.userId}&to=${a.amount > 0 ? friend.userId : 'me'}&fromName=${a.amount > 0 ? encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me') : encodeURIComponent(friend.name)}&toName=${a.amount > 0 ? encodeURIComponent(friend.name) : encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me')}&amount=${Math.abs(a.amount).toFixed(2)}&currency=${a.currency}`}
+                      className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
                     >
-                      {a.amount > 0
-                        ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
-                        : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
-                      }
-                    </p>
+                      Settle Up
+                    </a>
                   ))}
                 </div>
               </li>
