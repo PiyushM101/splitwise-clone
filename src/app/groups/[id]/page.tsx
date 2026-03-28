@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { ensureFriendshipsWithAll } from '@/lib/friends'
 
 const CURRENCIES: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥',
@@ -408,6 +409,10 @@ export default function GroupDetail() {
       setError(addError.message)
       return
     }
+
+    // Auto-friend the new member with all existing members
+    const memberIds = members.map((m) => m.user_id)
+    await ensureFriendshipsWithAll(profileId, memberIds)
 
     setSuccess(`Added ${profileEmail} to the group!`)
     setSearchQuery('')
