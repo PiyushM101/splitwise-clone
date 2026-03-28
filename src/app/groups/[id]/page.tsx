@@ -28,6 +28,18 @@ type Balance = {
   currency: string
 }
 
+type SpendingTotal = {
+  currency: string
+  amount: number
+}
+
+type PersonSpending = {
+  userId: string
+  name: string
+  paid: Record<string, number>
+  owes: Record<string, number>
+}
+
 export default function GroupDetail() {
   const params = useParams()
   const groupId = params.id as string
@@ -39,10 +51,13 @@ export default function GroupDetail() {
   const [balances, setBalances] = useState<Balance[]>([])
   const [simplifiedBalances, setSimplifiedBalances] = useState<Balance[]>([])
   const [showSimplified, setShowSimplified] = useState(true)
+  const [groupTotals, setGroupTotals] = useState<SpendingTotal[]>([])
+  const [personSpending, setPersonSpending] = useState<PersonSpending[]>([])
   const [newEmail, setNewEmail] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showStats, setShowStats] = useState(false)
 
   const handleDelete = async (expenseId: string) => {
     if (!window.confirm('Are you sure you want to delete this expense?')) return
@@ -58,7 +73,6 @@ export default function GroupDetail() {
       nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
     }
 
-    // Group by currency
     const byCurrency: Record<string, Balance[]> = {}
     for (const b of balances) {
       if (!byCurrency[b.currency]) byCurrency[b.currency] = []
@@ -68,7 +82,6 @@ export default function GroupDetail() {
     const result: Balance[] = []
 
     for (const currency of Object.keys(byCurrency)) {
-      // Calculate net balance for each person
       const netBalance: Record<string, number> = {}
 
       for (const b of byCurrency[currency]) {
@@ -78,7 +91,6 @@ export default function GroupDetail() {
         netBalance[b.to] += b.amount
       }
 
-      // Separate into debtors and creditors
       const debtors: { id: string; amount: number }[] = []
       const creditors: { id: string; amount: number }[] = []
 
@@ -91,11 +103,9 @@ export default function GroupDetail() {
         }
       }
 
-      // Sort both by amount descending
       debtors.sort((a, b) => b.amount - a.amount)
       creditors.sort((a, b) => b.amount - a.amount)
 
-      // Match debtors with creditors
       let i = 0
       let j = 0
 
@@ -127,6 +137,59 @@ export default function GroupDetail() {
     return result
   }
 
+  const calculateSpending = (expenses: any[], members: any[]) => {
+    const nameMap: Record<string, string> = {}
+    for (const m of members) {
+      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+    }
+
+    // Group totals
+    const totals: Record<string, number> = {}
+    for (const expense of expenses) {
+      const currency = expense.currency
+      if (!totals[currency]) totals[currency] = 0
+      totals[currency] += parseFloat(expense.amount)
+    }
+    setGroupTotals(
+      Object.entries(totals).map(([currency, amount]) => ({
+        currency,
+        amount: Math.round(amount * 100) / 100,
+      }))
+    )
+
+    // Per-person spending
+    const personMap: Record<string, PersonSpending> = {}
+    for (const m of members) {
+      personMap[m.user_id] = {
+        userId: m.user_id,
+        name: nameMap[m.user_id],
+        paid: {},
+        owes: {},
+      }
+    }
+
+    for (const expense of expenses) {
+      const currency = expense.currency
+      const paidBy = expense.paid_by
+      const amount = parseFloat(expense.amount)
+
+      if (personMap[paidBy]) {
+        if (!personMap[paidBy].paid[currency]) personMap[paidBy].paid[currency] = 0
+        personMap[paidBy].paid[currency] += amount
+      }
+
+      for (const split of expense.expense_splits || []) {
+        const owedAmount = parseFloat(split.amount_owed)
+        if (personMap[split.user_id]) {
+          if (!personMap[split.user_id].owes[currency]) personMap[split.user_id].owes[currency] = 0
+          personMap[split.user_id].owes[currency] += owedAmount
+        }
+      }
+    }
+
+    setPersonSpending(Object.values(personMap))
+  }
+
   const calculateBalances = (expenses: any[], members: any[], settlements: any[]) => {
     const debtsByCurrency: Record<string, Record<string, Record<string, number>>> = {}
 
@@ -150,7 +213,6 @@ export default function GroupDetail() {
       }
     }
 
-    // Subtract settlements
     for (const settlement of settlements) {
       const currency = settlement.currency
       const from = settlement.paid_by
@@ -250,6 +312,7 @@ export default function GroupDetail() {
     setExpenses(expenseData || [])
     setSettlements(settlementData || [])
     calculateBalances(expenseData || [], memberData || [], settlementData || [])
+    calculateSpending(expenseData || [], memberData || [])
     setLoading(false)
   }
 
@@ -303,7 +366,25 @@ export default function GroupDetail() {
       <div>
         <a href="/dashboard" className="text-purple-600 hover:underline text-sm">&larr; Back to Dashboard</a>
 
-        <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-6">{group.name}</h1>
+        <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-2">{group.name}</h1>
+
+        {/* Group spending summary */}
+        <div className="flex items-center gap-4 mb-6">
+          {groupTotals.length > 0 && (
+            <p className="text-sm text-gray-500">
+              Total spending:{' '}
+              {groupTotals.map((t, i) => (
+                <span key={t.currency} className="font-semibold text-purple-700">
+                  {i > 0 ? ' + ' : ''}{getSymbol(t.currency)}{t.amount.toFixed(2)}
+                </span>
+              ))}
+            </p>
+          )}
+          <span className="text-gray-300">|</span>
+          <p className="text-sm text-gray-500">{members.length} member{members.length !== 1 ? 's' : ''}</p>
+          <span className="text-gray-300">|</span>
+          <p className="text-sm text-gray-500">{expenses.length} expense{expenses.length !== 1 ? 's' : ''}</p>
+        </div>
 
         {/* Balances */}
         <div className="mb-8">
@@ -311,7 +392,7 @@ export default function GroupDetail() {
             <h2 className="text-lg font-semibold text-gray-700">Balances</h2>
             {balances.length > 0 && (
               <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-xs text-gray-500">Simplify</span>
+                <span className="text-xs text-gray-500">Simplify Debts</span>
                 <div
                   onClick={() => setShowSimplified(!showSimplified)}
                   className={`w-10 h-5 rounded-full relative transition-colors ${
@@ -328,12 +409,6 @@ export default function GroupDetail() {
             )}
           </div>
 
-          {showSimplified && balances.length > 0 && (
-            <p className="text-xs text-gray-400 mb-3">
-              Reduced from {balances.length} payment{balances.length !== 1 ? 's' : ''} to {simplifiedBalances.length} payment{simplifiedBalances.length !== 1 ? 's' : ''}.
-            </p>
-          )}
-
           {displayBalances.length === 0 ? (
             <p className="text-gray-400 text-sm">All settled up!</p>
           ) : (
@@ -343,7 +418,7 @@ export default function GroupDetail() {
                   <p className="text-sm text-gray-700">
                     <span className="text-red-500 font-medium">{b.fromName}</span>
                     {' owes '}
-                    <span className="text-green-600 font-medium">{b.toName}</span>
+                    <span className="text-purple-500 font-medium">{b.toName}</span>
                   </p>
                   <div className="flex items-center gap-3">
                     <p className="font-bold text-purple-700">
@@ -358,7 +433,7 @@ export default function GroupDetail() {
                           }
                         }
                       }}
-                      className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                      className="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600"
                     >
                       Settle Up
                     </a>
@@ -369,7 +444,53 @@ export default function GroupDetail() {
           )}
         </div>
 
-        {/* Members list */}
+        {/* Per-person stats toggle */}
+        <div className="mb-8">
+          <button
+            onClick={() => setShowStats(!showStats)}
+            className="text-sm text-purple-600 hover:underline"
+          >
+            {showStats ? 'Hide spending breakdown' : 'Show spending breakdown'}
+          </button>
+
+          {showStats && (
+            <div className="mt-3 space-y-2">
+              {personSpending.map((person) => (
+                <div key={person.userId} className="border border-gray-200 rounded p-3">
+                  <p className="font-medium text-gray-800 mb-1">{person.name}</p>
+                  <div className="flex gap-6 text-sm">
+                    <div>
+                      <span className="text-gray-400">Paid: </span>
+                      {Object.keys(person.paid).length === 0 ? (
+                        <span className="text-gray-300">Nothing</span>
+                      ) : (
+                        Object.entries(person.paid).map(([currency, amount]) => (
+                          <span key={currency} className="text-purple-700 font-medium">
+                            {getSymbol(currency)}{amount.toFixed(2)}{' '}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Share: </span>
+                      {Object.keys(person.owes).length === 0 ? (
+                        <span className="text-gray-300">Nothing</span>
+                      ) : (
+                        Object.entries(person.owes).map(([currency, amount]) => (
+                          <span key={currency} className="text-gray-700 font-medium">
+                            {getSymbol(currency)}{amount.toFixed(2)}{' '}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Members */}
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Members</h2>
         <ul className="space-y-2 mb-8">
           {members.map((member) => (
@@ -389,7 +510,7 @@ export default function GroupDetail() {
           ))}
         </ul>
 
-        {/* Add member form */}
+        {/* Add member */}
         <h2 className="text-lg font-semibold text-gray-700 mb-3">Add a Member</h2>
         <form onSubmit={handleAddMember} className="flex gap-3 mb-10">
           <input
@@ -409,9 +530,9 @@ export default function GroupDetail() {
         </form>
 
         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        {success && <p className="text-green-600 text-sm mt-2">{success}</p>}
+        {success && <p className="text-purple-500 text-sm mt-2">{success}</p>}
 
-        {/* Activity */}
+        {/* Activity feed */}
         <div className="border-t pt-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-gray-700">Activity</h2>
@@ -442,19 +563,23 @@ export default function GroupDetail() {
                     const symbol = getSymbol(item.currency)
 
                     return (
-                      <li key={item.id} className="border border-green-200 bg-green-50 rounded p-4">
+                      <li key={item.id} className="border border-purple-200 bg-purple-50 rounded-lg p-4">
                         <div className="flex justify-between items-center">
-                          <div>
-                            <p className="font-medium text-green-700">Settlement</p>
-                            <p className="text-sm text-gray-500 mt-1">
-                              <span className="text-green-600">{payerName}</span>
-                              {' paid '}
-                              <span className="text-green-600">{payeeName}</span>
-                              {' on '}
-                              {new Date(item.date).toLocaleDateString()}
-                            </p>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-200 flex items-center justify-center">
+                              <span className="text-purple-700 text-lg">✓</span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-purple-700">Settlement</p>
+                              <p className="text-sm text-gray-500">
+                                {payerName} paid {payeeName}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {new Date(item.date).toLocaleDateString()}
+                              </p>
+                            </div>
                           </div>
-                          <p className="text-lg font-bold text-green-700">
+                          <p className="text-lg font-bold text-purple-700">
                             {symbol}{parseFloat(item.amount).toFixed(2)}
                           </p>
                         </div>
@@ -465,15 +590,24 @@ export default function GroupDetail() {
                   const expense = item
                   const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
                   const symbol = getSymbol(expense.currency)
+                  const firstLetter = expense.description.charAt(0).toUpperCase()
 
                   return (
-                    <li key={expense.id} className="border border-gray-200 rounded p-4">
+                    <li key={expense.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-gray-800">{expense.description}</p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            Paid by <span className="text-purple-600">{payer}</span> on {new Date(expense.date).toLocaleDateString()}
-                          </p>
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                            <span className="text-gray-500 text-lg font-bold">{firstLetter}</span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800">{expense.description}</p>
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              Paid by <span className="text-purple-600">{payer}</span>
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {new Date(expense.date).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-bold text-purple-700">
@@ -496,13 +630,12 @@ export default function GroupDetail() {
                         </div>
                       </div>
 
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <p className="text-xs text-gray-400 mb-2">Split between:</p>
+                      <div className="mt-3 pt-3 border-t border-gray-100 ml-13">
                         <div className="flex flex-wrap gap-2">
                           {expense.expense_splits?.map((split: any) => (
                             <span
                               key={split.user_id}
-                              className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded"
+                              className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full"
                             >
                               {split.profiles?.name || split.profiles?.email}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
                             </span>
