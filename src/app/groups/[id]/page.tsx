@@ -308,16 +308,21 @@ export default function GroupDetail() {
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-semibold text-gray-700">Balances</h2>
             {balances.length > 0 && (
-              <button
-                onClick={() => setShowSimplified(!showSimplified)}
-                className={`text-xs px-3 py-1 rounded ${
-                  showSimplified
-                    ? 'bg-purple-700 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {showSimplified ? 'Showing Simplified' : 'Simplify Debts'}
-              </button>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-xs text-gray-500">Simplify</span>
+                <div
+                  onClick={() => setShowSimplified(!showSimplified)}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${
+                    showSimplified ? 'bg-purple-700' : 'bg-gray-300'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${
+                      showSimplified ? 'translate-x-5' : 'translate-x-0.5'
+                    }`}
+                  />
+                </div>
+              </label>
             )}
           </div>
 
