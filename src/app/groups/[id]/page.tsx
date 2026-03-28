@@ -35,6 +35,7 @@ export default function GroupDetail() {
   const [group, setGroup] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
+  const [settlements, setSettlements] = useState<any[]>([])
   const [balances, setBalances] = useState<Balance[]>([])
   const [simplifiedBalances, setSimplifiedBalances] = useState<Balance[]>([])
   const [showSimplified, setShowSimplified] = useState(true)
@@ -243,10 +244,11 @@ export default function GroupDetail() {
 
     const { data: settlementData } = await supabase
       .from('settlements')
-      .select('*')
+      .select('*, payer:profiles!paid_by(name, email), payee:profiles!paid_to(name, email)')
       .eq('group_id', groupId)
 
     setExpenses(expenseData || [])
+    setSettlements(settlementData || [])
     calculateBalances(expenseData || [], memberData || [], settlementData || [])
     setLoading(false)
   }
@@ -409,10 +411,10 @@ export default function GroupDetail() {
         {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         {success && <p className="text-green-600 text-sm mt-2">{success}</p>}
 
-        {/* Expenses */}
+        {/* Activity */}
         <div className="border-t pt-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-700">Expenses</h2>
+            <h2 className="text-lg font-semibold text-gray-700">Activity</h2>
             <a
               href={`/groups/${groupId}/new`}
               className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800 text-sm"
@@ -421,62 +423,98 @@ export default function GroupDetail() {
             </a>
           </div>
 
-          {expenses.length === 0 ? (
-            <p className="text-gray-400 text-sm">No expenses yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {expenses.map((expense) => {
-                const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
-                const symbol = getSymbol(expense.currency)
+          {(() => {
+            const activity = [
+              ...expenses.map((e) => ({ ...e, type: 'expense' as const, sortDate: e.created_at })),
+              ...settlements.map((s) => ({ ...s, type: 'settlement' as const, sortDate: s.created_at })),
+            ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
 
-                return (
-                  <li key={expense.id} className="border border-gray-200 rounded p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium text-gray-800">{expense.description}</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Paid by <span className="text-purple-600">{payer}</span> on {new Date(expense.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-purple-700">
-                          {symbol}{parseFloat(expense.amount).toFixed(2)}
-                        </p>
-                        <div className="flex gap-2 mt-1 justify-end">
-                          <a
-                            href={`/groups/${groupId}/edit/${expense.id}`}
-                            className="text-xs text-purple-600 hover:underline"
-                          >
-                            Edit
-                          </a>
-                          <button
-                            onClick={() => handleDelete(expense.id)}
-                            className="text-xs text-red-500 hover:underline"
-                          >
-                            Delete
-                          </button>
+            if (activity.length === 0) {
+              return <p className="text-gray-400 text-sm">No activity yet.</p>
+            }
+
+            return (
+              <ul className="space-y-3">
+                {activity.map((item) => {
+                  if (item.type === 'settlement') {
+                    const payerName = (item as any).payer?.name || (item as any).payer?.email || 'Unknown'
+                    const payeeName = (item as any).payee?.name || (item as any).payee?.email || 'Unknown'
+                    const symbol = getSymbol(item.currency)
+
+                    return (
+                      <li key={item.id} className="border border-green-200 bg-green-50 rounded p-4">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="font-medium text-green-700">Settlement</p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              <span className="text-green-600">{payerName}</span>
+                              {' paid '}
+                              <span className="text-green-600">{payeeName}</span>
+                              {' on '}
+                              {new Date(item.date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <p className="text-lg font-bold text-green-700">
+                            {symbol}{parseFloat(item.amount).toFixed(2)}
+                          </p>
+                        </div>
+                      </li>
+                    )
+                  }
+
+                  const expense = item
+                  const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
+                  const symbol = getSymbol(expense.currency)
+
+                  return (
+                    <li key={expense.id} className="border border-gray-200 rounded p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-gray-800">{expense.description}</p>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Paid by <span className="text-purple-600">{payer}</span> on {new Date(expense.date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-purple-700">
+                            {symbol}{parseFloat(expense.amount).toFixed(2)}
+                          </p>
+                          <div className="flex gap-2 mt-1 justify-end">
+                            <a
+                              href={`/groups/${groupId}/edit/${expense.id}`}
+                              className="text-xs text-purple-600 hover:underline"
+                            >
+                              Edit
+                            </a>
+                            <button
+                              onClick={() => handleDelete(expense.id)}
+                              className="text-xs text-red-500 hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <p className="text-xs text-gray-400 mb-2">Split between:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {expense.expense_splits?.map((split: any) => (
-                          <span
-                            key={split.user_id}
-                            className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded"
-                          >
-                            {split.profiles?.name || split.profiles?.email}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
-                          </span>
-                        ))}
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-400 mb-2">Split between:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {expense.expense_splits?.map((split: any) => (
+                            <span
+                              key={split.user_id}
+                              className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded"
+                            >
+                              {split.profiles?.name || split.profiles?.email}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )
+          })()}
         </div>
       </div>
     </AuthGuard>
