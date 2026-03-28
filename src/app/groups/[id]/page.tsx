@@ -349,6 +349,13 @@ export default function GroupDetail() {
                     </p>
                     <a
                       href={`/groups/${groupId}/settle?from=${b.from}&to=${b.to}&fromName=${encodeURIComponent(b.fromName)}&toName=${encodeURIComponent(b.toName)}&amount=${b.amount.toFixed(2)}&currency=${b.currency}`}
+                      onClick={(e) => {
+                        if (!showSimplified && simplifiedBalances.length === 0) {
+                          if (!window.confirm('Simplified debts show everyone is settled up. These debts cancel each other out and no payment is needed. Are you sure you want to settle anyway?')) {
+                            e.preventDefault()
+                          }
+                        }
+                      }}
                       className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
                     >
                       Settle Up
