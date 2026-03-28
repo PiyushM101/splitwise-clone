@@ -57,13 +57,21 @@ export default function Dashboard() {
 
         setGroups(groupList || [])
 
-        // Get all expenses in user groups
-        const { data: expenses } = await supabase
+        // Get all expenses in user's groups + non-group expenses
+        const { data: groupExpenses } = await supabase
           .from('expenses')
           .select('*, expense_splits(user_id, amount_owed)')
           .in('group_id', groupIds)
 
-        // Get all settlements in user groups
+        const { data: friendExpenses } = await supabase
+          .from('expenses')
+          .select('*, expense_splits(user_id, amount_owed)')
+          .is('group_id', null)
+          .or(`created_by.eq.${currentUserId},paid_by.eq.${currentUserId}`)
+
+        const expenses = [...(groupExpenses || []), ...(friendExpenses || [])]
+
+        // Get all settlements in user's groups
         const { data: settlements } = await supabase
           .from('settlements')
           .select('*')
@@ -165,12 +173,20 @@ export default function Dashboard() {
       <div>
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-purple-700">Dashboard</h1>
-          <a
-            href="/groups/new"
-            className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
-          >
-            + New Group
-          </a>
+          <div className="flex gap-2">
+            <a
+              href="/expenses/new"
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            >
+              + Friend Expense
+            </a>
+            <a
+              href="/groups/new"
+              className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800"
+            >
+              + New Group
+            </a>
+          </div>
         </div>
 
         <p className="text-gray-600 mb-6">
