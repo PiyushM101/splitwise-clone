@@ -28,12 +28,14 @@ type FriendBalance = {
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [groups, setGroups] = useState<any[]>([])
+  const [groupActivity, setGroupActivity] = useState<Record<string, string>>({})
   const [youOwe, setYouOwe] = useState<{ currency: string; amount: number }[]>([])
   const [owedToYou, setOwedToYou] = useState<{ currency: string; amount: number }[]>([])
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [friendSort, setFriendSort] = useState<'name' | 'recent' | 'highest' | 'owes_you'>('name')
+  const [groupSort, setGroupSort] = useState<'name' | 'created' | 'activity'>('activity')
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -67,6 +69,38 @@ export default function Dashboard() {
           .order('created_at', { ascending: false })
 
         setGroups(groupList || [])
+
+        // Get last activity per group
+        const activityMap: Record<string, string> = {}
+        for (const gId of groupIds) {
+          activityMap[gId] = '1970-01-01'
+        }
+
+        const { data: groupExpenseActivity } = await supabase
+          .from('expenses')
+          .select('group_id, created_at')
+          .in('group_id', groupIds)
+          .order('created_at', { ascending: false })
+
+        for (const e of (groupExpenseActivity || [])) {
+          if (e.group_id && (!activityMap[e.group_id] || e.created_at > activityMap[e.group_id])) {
+            activityMap[e.group_id] = e.created_at
+          }
+        }
+
+        const { data: groupSettlementActivity } = await supabase
+          .from('settlements')
+          .select('group_id, created_at')
+          .in('group_id', groupIds)
+          .order('created_at', { ascending: false })
+
+        for (const s of (groupSettlementActivity || [])) {
+          if (s.group_id && (!activityMap[s.group_id] || s.created_at > activityMap[s.group_id])) {
+            activityMap[s.group_id] = s.created_at
+          }
+        }
+
+        setGroupActivity(activityMap)
 
         // Get all expenses in user's groups + non-group expenses
         const { data: groupExpenses } = await supabase
@@ -357,7 +391,20 @@ export default function Dashboard() {
         })()}
 
         {/* Groups */}
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Your Groups</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-700">Your Groups</h2>
+          {groups.length > 1 && (
+            <select
+              value={groupSort}
+              onChange={(e) => setGroupSort(e.target.value as any)}
+              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="activity">Latest activity</option>
+              <option value="name">Name (A-Z)</option>
+              <option value="created">Date created</option>
+            </select>
+          )}
+        </div>
 
         {loading ? (
           <p className="text-gray-400">Loading...</p>
@@ -365,16 +412,22 @@ export default function Dashboard() {
           <p className="text-gray-400">No groups yet. Create one to get started!</p>
         ) : (
           <ul className="space-y-3">
-            {groups.map((group) => (
+            {[...groups].sort((a, b) => {
+              if (groupSort === 'name') return a.name.localeCompare(b.name)
+              if (groupSort === 'created') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              if (groupSort === 'activity') {
+                const actA = groupActivity[a.id] || '1970-01-01'
+                const actB = groupActivity[b.id] || '1970-01-01'
+                return new Date(actB).getTime() - new Date(actA).getTime()
+              }
+              return 0
+            }).map((group) => (
               <li key={group.id}>
                 <a
                   href={`/groups/${group.id}`}
                   className="block border border-gray-200 rounded p-4 hover:border-purple-400 hover:bg-purple-50"
                 >
                   <span className="text-purple-700 font-medium">{group.name}</span>
-                  <span className="text-gray-400 text-sm ml-2">
-                    Created {new Date(group.created_at).toLocaleDateString()}
-                  </span>
                 </a>
               </li>
             ))}
