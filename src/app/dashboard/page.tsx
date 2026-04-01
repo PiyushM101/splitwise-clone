@@ -22,6 +22,7 @@ type FriendBalance = {
   userId: string
   name: string
   amounts: { currency: string; amount: number }[]
+  lastActivity: string
 }
 
 export default function Dashboard() {
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddMenu, setShowAddMenu] = useState(false)
+  const [friendSort, setFriendSort] = useState<'name' | 'recent' | 'highest' | 'owes_you'>('name')
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -158,14 +160,32 @@ export default function Dashboard() {
         setYouOwe(Object.entries(oweMap).map(([currency, amount]) => ({ currency, amount })))
         setOwedToYou(Object.entries(owedMap).map(([currency, amount]) => ({ currency, amount })))
 
+        // Build last activity map per friend
+        const lastActivityMap: Record<string, string> = {}
+        for (const expense of expenses) {
+          for (const split of expense.expense_splits || []) {
+            const otherId = split.user_id === currentUserId ? expense.paid_by : split.user_id
+            if (otherId === currentUserId) continue
+            if (!lastActivityMap[otherId] || expense.created_at > lastActivityMap[otherId]) {
+              lastActivityMap[otherId] = expense.created_at
+            }
+          }
+        }
+        for (const settlement of (settlements || [])) {
+          const otherId = settlement.paid_by === currentUserId ? settlement.paid_to : settlement.paid_by
+          if (!lastActivityMap[otherId] || settlement.created_at > lastActivityMap[otherId]) {
+            lastActivityMap[otherId] = settlement.created_at
+          }
+        }
+
         const friends: FriendBalance[] = Object.entries(friendMap)
           .filter(([, amounts]) => amounts.some((a) => Math.abs(a.amount) > 0))
           .map(([userId, amounts]) => ({
             userId,
             name: nameMap[userId] || 'Unknown',
             amounts,
+            lastActivity: lastActivityMap[userId] || '1970-01-01',
           }))
-          .sort((a, b) => a.name.localeCompare(b.name))
 
         setFriendBalances(friends)
       }
@@ -261,42 +281,80 @@ export default function Dashboard() {
         </div>
 
         {/* Friend Balances */}
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Friend Balances</h2>
-        {friendBalances.length === 0 ? (
-          <p className="text-gray-400 text-sm mb-8">No balances yet.</p>
-        ) : (
-          <ul className="space-y-2 mb-8">
-            {friendBalances.map((friend) => (
-              <li key={friend.userId} className="border border-gray-200 rounded p-3 flex justify-between items-center">
-                <a href={`/friends/${friend.userId}`} className="font-medium text-purple-700 hover:underline">{friend.name}</a>
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-700">Friend Balances</h2>
+          {friendBalances.length > 1 && (
+            <select
+              value={friendSort}
+              onChange={(e) => setFriendSort(e.target.value as any)}
+              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="name">Name (A-Z)</option>
+              <option value="recent">Most recent</option>
+              <option value="highest">Highest amount</option>
+              <option value="owes_you">Owes you most</option>
+            </select>
+          )}
+        </div>
+        {(() => {
+          const sorted = [...friendBalances].sort((a, b) => {
+            if (friendSort === 'name') {
+              return a.name.localeCompare(b.name)
+            }
+            if (friendSort === 'recent') {
+              return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+            }
+            if (friendSort === 'highest') {
+              const totalA = a.amounts.reduce((acc, x) => acc + Math.abs(x.amount), 0)
+              const totalB = b.amounts.reduce((acc, x) => acc + Math.abs(x.amount), 0)
+              return totalB - totalA
+            }
+            if (friendSort === 'owes_you') {
+              const owedA = a.amounts.reduce((acc, x) => acc + (x.amount < 0 ? Math.abs(x.amount) : 0), 0)
+              const owedB = b.amounts.reduce((acc, x) => acc + (x.amount < 0 ? Math.abs(x.amount) : 0), 0)
+              return owedB - owedA
+            }
+            return 0
+          })
+
+          if (sorted.length === 0) {
+            return <p className="text-gray-400 text-sm mb-8">No balances yet.</p>
+          }
+
+          return (
+            <ul className="space-y-2 mb-8">
+              {sorted.map((friend) => (
+                <li key={friend.userId} className="border border-gray-200 rounded p-3 flex justify-between items-center">
+                  <a href={`/friends/${friend.userId}`} className="font-medium text-purple-700 hover:underline">{friend.name}</a>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      {friend.amounts.map((a) => (
+                        <p
+                          key={a.currency}
+                          className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
+                        >
+                          {a.amount > 0
+                            ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
+                            : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
+                          }
+                        </p>
+                      ))}
+                    </div>
                     {friend.amounts.map((a) => (
-                      <p
-                        key={a.currency}
-                        className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
+                      <a
+                        key={`settle-${a.currency}`}
+                        href={`/friends/${friend.userId}/settle?from=${a.amount > 0 ? 'me' : friend.userId}&to=${a.amount > 0 ? friend.userId : 'me'}&fromName=${a.amount > 0 ? encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me') : encodeURIComponent(friend.name)}&toName=${a.amount > 0 ? encodeURIComponent(friend.name) : encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me')}&amount=${Math.abs(a.amount).toFixed(2)}&currency=${a.currency}`}
+                        className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
                       >
-                        {a.amount > 0
-                          ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}`
-                          : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`
-                        }
-                      </p>
+                        Settle Up
+                      </a>
                     ))}
                   </div>
-                  {friend.amounts.map((a) => (
-                    <a
-                      key={`settle-${a.currency}`}
-                      href={`/friends/${friend.userId}/settle?from=${a.amount > 0 ? 'me' : friend.userId}&to=${a.amount > 0 ? friend.userId : 'me'}&fromName=${a.amount > 0 ? encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me') : encodeURIComponent(friend.name)}&toName=${a.amount > 0 ? encodeURIComponent(friend.name) : encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me')}&amount=${Math.abs(a.amount).toFixed(2)}&currency=${a.currency}`}
-                      className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                    >
-                      Settle Up
-                    </a>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                </li>
+              ))}
+            </ul>
+          )
+        })()}
 
         {/* Groups */}
         <h2 className="text-lg font-semibold text-gray-700 mb-4">Your Groups</h2>
