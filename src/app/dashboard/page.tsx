@@ -291,7 +291,8 @@ export default function Dashboard() {
             >
               <option value="name">Name (A-Z)</option>
               <option value="recent">Most recent</option>
-              <option value="highest">Highest amount</option>
+              <option value="highest">You owe most</option>
+              <option value="lowest">You owe least</option>
               <option value="owes_you">Owes you most</option>
             </select>
           )}
@@ -305,9 +306,14 @@ export default function Dashboard() {
               return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
             }
             if (friendSort === 'highest') {
-              const totalA = a.amounts.reduce((acc, x) => acc + Math.abs(x.amount), 0)
-              const totalB = b.amounts.reduce((acc, x) => acc + Math.abs(x.amount), 0)
-              return totalB - totalA
+              const oweA = a.amounts.reduce((acc, x) => acc + (x.amount > 0 ? x.amount : 0), 0)
+              const oweB = b.amounts.reduce((acc, x) => acc + (x.amount > 0 ? x.amount : 0), 0)
+              return oweB - oweA
+            }
+            if (friendSort === 'lowest') {
+              const oweA = a.amounts.reduce((acc, x) => acc + (x.amount > 0 ? x.amount : 0), 0)
+              const oweB = b.amounts.reduce((acc, x) => acc + (x.amount > 0 ? x.amount : 0), 0)
+              return oweA - oweB
             }
             if (friendSort === 'owes_you') {
               const owedA = a.amounts.reduce((acc, x) => acc + (x.amount < 0 ? Math.abs(x.amount) : 0), 0)
