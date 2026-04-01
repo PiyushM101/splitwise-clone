@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [groups, setGroups] = useState<any[]>([])
   const [groupActivity, setGroupActivity] = useState<Record<string, string>>({})
+  const [groupBalances, setGroupBalances] = useState<Record<string, { currency: string; amount: number }[]>>({})
   const [youOwe, setYouOwe] = useState<{ currency: string; amount: number }[]>([])
   const [owedToYou, setOwedToYou] = useState<{ currency: string; amount: number }[]>([])
   const [friendBalances, setFriendBalances] = useState<FriendBalance[]>([])
@@ -101,6 +102,64 @@ export default function Dashboard() {
         }
 
         setGroupActivity(activityMap)
+
+        // Calculate per-group balances for current user
+        const groupBalanceMap: Record<string, Record<string, number>> = {}
+
+        const { data: allGroupExpenses } = await supabase
+          .from('expenses')
+          .select('group_id, currency, paid_by, expense_splits(user_id, amount_owed)')
+          .in('group_id', groupIds)
+
+        for (const expense of (allGroupExpenses || [])) {
+          const gId = expense.group_id
+          if (!gId) continue
+          if (!groupBalanceMap[gId]) groupBalanceMap[gId] = {}
+          const currency = expense.currency
+
+          for (const split of expense.expense_splits || []) {
+            if (split.user_id === expense.paid_by) continue
+
+            if (split.user_id === currentUserId) {
+              // I owe the payer
+              if (!groupBalanceMap[gId][currency]) groupBalanceMap[gId][currency] = 0
+              groupBalanceMap[gId][currency] += parseFloat(split.amount_owed)
+            } else if (expense.paid_by === currentUserId) {
+              // Someone owes me
+              if (!groupBalanceMap[gId][currency]) groupBalanceMap[gId][currency] = 0
+              groupBalanceMap[gId][currency] -= parseFloat(split.amount_owed)
+            }
+          }
+        }
+
+        const { data: allGroupSettlements } = await supabase
+          .from('settlements')
+          .select('group_id, currency, paid_by, paid_to, amount')
+          .in('group_id', groupIds)
+
+        for (const settlement of (allGroupSettlements || [])) {
+          const gId = settlement.group_id
+          if (!gId) continue
+          if (!groupBalanceMap[gId]) groupBalanceMap[gId] = {}
+          const currency = settlement.currency
+          const amount = parseFloat(settlement.amount)
+
+          if (settlement.paid_by === currentUserId) {
+            if (!groupBalanceMap[gId][currency]) groupBalanceMap[gId][currency] = 0
+            groupBalanceMap[gId][currency] -= amount
+          } else if (settlement.paid_to === currentUserId) {
+            if (!groupBalanceMap[gId][currency]) groupBalanceMap[gId][currency] = 0
+            groupBalanceMap[gId][currency] += amount
+          }
+        }
+
+        const groupBalResult: Record<string, { currency: string; amount: number }[]> = {}
+        for (const [gId, currencies] of Object.entries(groupBalanceMap)) {
+          groupBalResult[gId] = Object.entries(currencies)
+            .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
+            .filter((b) => b.amount !== 0)
+        }
+        setGroupBalances(groupBalResult)
 
         // Get all expenses in user's groups + non-group expenses
         const { data: groupExpenses } = await supabase
@@ -421,16 +480,36 @@ export default function Dashboard() {
                 return new Date(actB).getTime() - new Date(actA).getTime()
               }
               return 0
-            }).map((group) => (
-              <li key={group.id}>
-                <a
-                  href={`/groups/${group.id}`}
-                  className="block border border-gray-200 rounded p-4 hover:border-purple-400 hover:bg-purple-50"
-                >
-                  <span className="text-purple-700 font-medium">{group.name}</span>
-                </a>
-              </li>
-            ))}
+            }).map((group) => {
+              const balances = groupBalances[group.id] || []
+              return (
+                <li key={group.id}>
+                  <a
+                    href={`/groups/${group.id}`}
+                    className="flex justify-between items-center border border-gray-200 rounded p-4 hover:border-purple-400 hover:bg-purple-50"
+                  >
+                    <span className="text-purple-700 font-medium">{group.name}</span>
+                    <div className="text-right">
+                      {balances.length === 0 ? (
+                        <span className="text-xs text-gray-300">Settled up</span>
+                      ) : (
+                        balances.map((b) => (
+                          <p
+                            key={b.currency}
+                            className={`text-sm font-bold ${b.amount > 0 ? 'text-red-500' : 'text-purple-500'}`}
+                          >
+                            {b.amount > 0
+                              ? `You owe ${getSymbol(b.currency)}${b.amount.toFixed(2)}`
+                              : `Owed ${getSymbol(b.currency)}${Math.abs(b.amount).toFixed(2)}`
+                            }
+                          </p>
+                        ))
+                      )}
+                    </div>
+                  </a>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
