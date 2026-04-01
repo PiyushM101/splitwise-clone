@@ -496,7 +496,7 @@ export default function Dashboard() {
                         balances.map((b) => (
                           <p
                             key={b.currency}
-                            className={`text-sm font-bold ${b.amount > 0 ? 'text-red-500' : 'text-purple-500'}`}
+                            className={`text-sm font-bold ${b.amount > 0 ? 'text-red-500' : 'text-green-600'}`}
                           >
                             {b.amount > 0
                               ? `You owe ${getSymbol(b.currency)}${b.amount.toFixed(2)}`
