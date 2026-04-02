@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { CATEGORIES, detectCategory } from '@/lib/categories'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' },
@@ -49,6 +50,8 @@ export default function NewExpense() {
   const [currency, setCurrency] = useState('USD')
   const [paidBy, setPaidBy] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [category, setCategory] = useState('Other')
+  const [categoryManual, setCategoryManual] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -222,6 +225,7 @@ export default function NewExpense() {
         paid_by: paidBy,
         created_by: session.user.id,
         date,
+        category,
         split_method: splitMethod,
       })
       .select()
@@ -269,7 +273,14 @@ export default function NewExpense() {
             <input
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                if (!categoryManual) {
+                  const detected = detectCategory(e.target.value)
+                  if (detected) setCategory(detected)
+                  else setCategory('Other')
+                }
+              }}
               placeholder="e.g. Dinner, Groceries"
               required
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
