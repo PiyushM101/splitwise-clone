@@ -45,6 +45,9 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedWeekStart, setSelectedWeekStart] = useState<string>('')
   const [selectedMonth, setSelectedMonth] = useState<string>('')
+  const [customFilterMode, setCustomFilterMode] = useState(false)
+  const [customDateFrom, setCustomDateFrom] = useState<string>('')
+  const [customDateTo, setCustomDateTo] = useState<string>('')
   const [allExpenses, setAllExpenses] = useState<any[]>([])
 
   useEffect(() => {
@@ -481,6 +484,7 @@ export default function Dashboard() {
               {(['daily', 'weekly', 'monthly'] as const).map((view) => (
                 <button key={view} onClick={() => {
                   setTimeView(view)
+                  setCustomFilterMode(false)
                   const now = new Date()
                   const expenses = allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   if (expenses.length === 0) return
@@ -499,6 +503,31 @@ export default function Dashboard() {
                   {view}
                 </button>
               ))}
+            </div>
+
+            {/* Custom date filter */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={customFilterMode} onChange={(e) => setCustomFilterMode(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300" />
+                  <span className="text-sm font-medium text-gray-700">Custom date range</span>
+                </label>
+                {customFilterMode && (
+                  <div className="flex gap-3 items-center">
+                    <div>
+                      <label className="text-xs text-gray-500">From</label>
+                      <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)}
+                        className="border border-gray-200 rounded px-2 py-1 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">To</label>
+                      <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)}
+                        className="border border-gray-200 rounded px-2 py-1 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {(() => {
@@ -523,6 +552,12 @@ export default function Dashboard() {
 
               // Filter by selected period
               const filtered = allExpensesWithDate.filter((e) => {
+                if (customFilterMode && customDateFrom && customDateTo) {
+                  const fromDate = new Date(customDateFrom)
+                  const toDate = new Date(customDateTo)
+                  toDate.setDate(toDate.getDate() + 1)
+                  return e.dateObj >= fromDate && e.dateObj < toDate
+                }
                 if (timeView === 'daily' && selectedDate) {
                   return e.dateObj.toISOString().split('T')[0] === selectedDate
                 } else if (timeView === 'weekly' && selectedWeekStart) {
@@ -539,6 +574,11 @@ export default function Dashboard() {
 
               // Get period label
               const getPeriodLabel = () => {
+                if (customFilterMode && customDateFrom && customDateTo) {
+                  const from = new Date(customDateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  const to = new Date(customDateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  return `${from} - ${to}`
+                }
                 if (timeView === 'daily' && selectedDate) {
                   return new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
                 } else if (timeView === 'weekly' && selectedWeekStart) {
@@ -638,18 +678,22 @@ export default function Dashboard() {
                   {/* Period header with navigation */}
                   <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
                     <div className="flex justify-between items-center">
-                      <button onClick={() => goToPeriod(currentPeriodIndex + 1)} disabled={currentPeriodIndex >= allPeriods.length - 1}
-                        className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        ← Previous
-                      </button>
-                      <div className="text-center">
+                      {!customFilterMode && (
+                        <button onClick={() => goToPeriod(currentPeriodIndex + 1)} disabled={currentPeriodIndex >= allPeriods.length - 1}
+                          className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                          ← Previous
+                        </button>
+                      )}
+                      <div className={`text-center ${!customFilterMode ? '' : 'flex-1'}`}>
                         <p className="text-xs text-gray-500 mb-1">Showing stats for:</p>
                         <p className="text-lg font-semibold text-purple-700">{getPeriodLabel()}</p>
                       </div>
-                      <button onClick={() => goToPeriod(currentPeriodIndex - 1)} disabled={currentPeriodIndex <= 0}
-                        className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                        Next →
-                      </button>
+                      {!customFilterMode && (
+                        <button onClick={() => goToPeriod(currentPeriodIndex - 1)} disabled={currentPeriodIndex <= 0}
+                          className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                          Next →
+                        </button>
+                      )}
                     </div>
                   </div>
 
