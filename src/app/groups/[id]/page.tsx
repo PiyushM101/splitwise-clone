@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { getCategoryEmoji } from '@/lib/categories'
 
 const CURRENCIES: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥',
@@ -523,14 +524,13 @@ export default function GroupDetail() {
                     const expense = item
                     const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
                     const symbol = getSymbol(expense.currency)
-                    const firstLetter = expense.description.charAt(0).toUpperCase()
 
                     return (
                       <li key={expense.id} className="border border-gray-200 rounded-lg p-4">
                         <div className="flex justify-between items-start">
                           <div className="flex items-start gap-3">
                             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                              <span className="text-gray-500 text-lg font-bold">{firstLetter}</span>
+                              <span className="text-lg">{getCategoryEmoji(expense.category)}</span>
                             </div>
                             <div>
                               <p className="font-medium text-gray-800">{expense.description}</p>

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { getCategoryEmoji } from '@/lib/categories'
 
 const CURRENCIES: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', CNY: '¥',
@@ -203,13 +204,18 @@ export default function FriendDetail() {
                 const symbol = getSymbol(expense.currency)
 
                 return (
-                  <li key={expense.id} className="border border-gray-200 rounded p-4">
+                  <li key={expense.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium text-gray-800">{expense.description}</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Paid by <span className="text-purple-600">{payer}</span> on {new Date(expense.date).toLocaleDateString()}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                          <span className="text-lg">{getCategoryEmoji(expense.category)}</span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">{expense.description}</p>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            Paid by <span className="text-purple-600">{payer}</span> on {new Date(expense.date).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                       <p className="text-lg font-bold text-purple-700">
                         {symbol}{parseFloat(expense.amount).toFixed(2)}
