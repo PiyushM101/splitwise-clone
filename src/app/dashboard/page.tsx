@@ -350,7 +350,7 @@ export default function Dashboard() {
                   <p className="text-lg font-bold text-gray-300">Nothing</p>
                 ) : (
                   owedToYou.map((o) => (
-                    <p key={o.currency} className="text-lg font-bold text-purple-500">{getSymbol(o.currency)}{o.amount.toFixed(2)}</p>
+                    <p key={o.currency} className="text-lg font-bold text-green-600">{getSymbol(o.currency)}{o.amount.toFixed(2)}</p>
                   ))
                 )}
               </div>
@@ -397,7 +397,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           {friend.amounts.map((a) => (
-                            <p key={a.currency} className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-purple-500'}`}>
+                            <p key={a.currency} className={`text-sm font-bold ${a.amount > 0 ? 'text-red-500' : 'text-green-600'}`}>
                               {a.amount > 0 ? `You owe ${getSymbol(a.currency)}${a.amount.toFixed(2)}` : `Owes you ${getSymbol(a.currency)}${Math.abs(a.amount).toFixed(2)}`}
                             </p>
                           ))}
@@ -456,7 +456,7 @@ export default function Dashboard() {
                             <span className="text-xs text-gray-300">Settled up</span>
                           ) : (
                             balances.map((b) => (
-                              <p key={b.currency} className={`text-sm font-bold ${b.amount > 0 ? 'text-red-500' : 'text-purple-500'}`}>
+                              <p key={b.currency} className={`text-sm font-bold ${b.amount > 0 ? 'text-red-500' : 'text-green-600'}`}>
                                 {b.amount > 0 ? `You owe ${getSymbol(b.currency)}${b.amount.toFixed(2)}` : `Owed ${getSymbol(b.currency)}${Math.abs(b.amount).toFixed(2)}`}
                               </p>
                             ))
@@ -595,7 +595,7 @@ export default function Dashboard() {
                     </div>
                     <div className="border border-gray-200 rounded-lg p-4">
                       <p className="text-xs text-gray-400 mb-1">Net lent out</p>
-                      <p className={`text-xl font-bold ${totalPaid - totalShare >= 0 ? 'text-purple-500' : 'text-red-500'}`}>
+                      <p className={`text-xl font-bold ${totalPaid - totalShare >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                         ${Math.abs(totalPaid - totalShare).toFixed(2)}
                         <span className="text-xs font-normal text-gray-400 ml-1">{totalPaid - totalShare >= 0 ? 'lent' : 'borrowed'}</span>
                       </p>
