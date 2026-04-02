@@ -19,6 +19,38 @@ const CURRENCIES: Record<string, string> = {
 
 const getSymbol = (code: string) => CURRENCIES[code] || code
 
+const downloadExpensesAsCSV = (expenses: any[], fileName: string = 'expenses.csv', currentUserId?: string) => {
+  const headers = ['Date', 'Description', 'Amount', 'Currency', 'Category', 'Your Share']
+  
+  const rows = expenses.map((expense) => {
+    const yourShare = expense.expense_splits?.find((s: any) => s.user_id === currentUserId)?.amount_owed || 0
+    
+    return [
+      new Date(expense.date).toLocaleDateString(),
+      `"${expense.description || ''}"`,
+      expense.amount,
+      expense.currency,
+      expense.category || 'Other',
+      yourShare
+    ]
+  })
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.join(','))
+  ].join('\n')
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', fileName)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 type FriendBalance = {
   userId: string
   name: string
@@ -695,6 +727,17 @@ export default function Dashboard() {
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Download button */}
+                  <div className="mb-6 flex justify-end">
+                    <button onClick={() => {
+                      const fileName = `expenses_${new Date().toISOString().split('T')[0]}.csv`
+                      downloadExpensesAsCSV(filtered, fileName, user?.id)
+                    }}
+                      className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 flex items-center gap-2">
+                      ↓ Download CSV
+                    </button>
                   </div>
 
                   {/* Personal insights */}
