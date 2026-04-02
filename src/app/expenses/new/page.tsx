@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
 import { ensureFriendship } from '@/lib/friends'
+import { CATEGORIES, detectCategory } from '@/lib/categories'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' },
@@ -48,6 +49,8 @@ export default function NewFriendExpense() {
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [category, setCategory] = useState('Other')
+  const [categoryManual, setCategoryManual] = useState(false)
   const [paidBy, setPaidBy] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -326,6 +329,7 @@ export default function NewFriendExpense() {
         paid_by: paidBy,
         created_by: session.user.id,
         date,
+        category,
         split_method: splitMethod,
       })
       .select()
@@ -427,7 +431,14 @@ export default function NewFriendExpense() {
             <input
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                if (!categoryManual) {
+                  const detected = detectCategory(e.target.value)
+                  if (detected) setCategory(detected)
+                  else setCategory('Other')
+                }
+              }}
               placeholder="e.g. Lunch, Movie tickets"
               required
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -460,6 +471,20 @@ export default function NewFriendExpense() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setCategoryManual(true) }}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>
+              ))}
+            </select>
           </div>
 
           {/* Date */}
