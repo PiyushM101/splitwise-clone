@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AuthGuard from '@/components/AuthGuard'
+import { CATEGORIES, detectCategory } from '@/lib/categories'
 
 const CURRENCIES = [
   { code: 'USD', symbol: '$' }, { code: 'EUR', symbol: '€' },
@@ -50,6 +51,8 @@ export default function EditExpense() {
   const [currency, setCurrency] = useState('USD')
   const [paidBy, setPaidBy] = useState('')
   const [date, setDate] = useState('')
+  const [category, setCategory] = useState('Other')
+  const [categoryManual, setCategoryManual] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
@@ -96,6 +99,7 @@ export default function EditExpense() {
       setPaidBy(expense.paid_by)
       const rawDate = expense.date as string
       setDate(typeof rawDate === 'string' ? rawDate.slice(0, 10) : '')
+      setCategory(expense.category || 'Other')
 
       const splits = (expense.expense_splits as any[]) || []
       setSplitWith(splits.map((s: any) => s.user_id))
@@ -275,6 +279,7 @@ export default function EditExpense() {
         currency,
         paid_by: paidBy,
         date,
+        category,
         split_method: splitMethod,
       })
       .eq('id', expenseId)
@@ -325,7 +330,14 @@ export default function EditExpense() {
             <input
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                if (!categoryManual) {
+                  const detected = detectCategory(e.target.value)
+                  if (detected) setCategory(detected)
+                  else setCategory('Other')
+                }
+              }}
               required
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
@@ -355,6 +367,19 @@ export default function EditExpense() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setCategoryManual(true) }}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>
+              ))}
+            </select>
           </div>
 
           <div>
