@@ -315,6 +315,19 @@ export default function NewExpense() {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setCategoryManual(true) }}
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
               type="date"
