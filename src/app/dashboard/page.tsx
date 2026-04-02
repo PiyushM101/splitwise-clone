@@ -42,7 +42,9 @@ export default function Dashboard() {
   // Analytics state
   const [activeTab, setActiveTab] = useState<'overview' | 'analytics'>('overview')
   const [timeView, setTimeView] = useState<'daily' | 'weekly' | 'monthly'>('monthly')
-  const [timeRange, setTimeRange] = useState<'all' | '3m' | '6m' | '1y'>('all')
+  const [selectedDate, setSelectedDate] = useState<string>('')
+  const [selectedWeekStart, setSelectedWeekStart] = useState<string>('')
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [allExpenses, setAllExpenses] = useState<any[]>([])
 
   useEffect(() => {
@@ -474,35 +476,111 @@ export default function Dashboard() {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div>
-            {/* Time controls */}
-            <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
-              <div className="flex gap-1">
-                {(['daily', 'weekly', 'monthly'] as const).map((view) => (
-                  <button key={view} onClick={() => setTimeView(view)}
-                    className={`px-3 py-1 rounded text-sm capitalize ${timeView === view ? 'bg-purple-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    {view}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-1">
-                {([['all', 'All time'], ['3m', '3 months'], ['6m', '6 months'], ['1y', '1 year']] as const).map(([value, label]) => (
-                  <button key={value} onClick={() => setTimeRange(value)}
-                    className={`px-3 py-1 rounded text-sm ${timeRange === value ? 'bg-purple-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+            {/* Time view selector */}
+            <div className="flex gap-1 mb-6">
+              {(['daily', 'weekly', 'monthly'] as const).map((view) => (
+                <button key={view} onClick={() => {
+                  setTimeView(view)
+                  const now = new Date()
+                  const expenses = allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  if (expenses.length === 0) return
+                  const latestDate = new Date(expenses[0].date)
+                  if (view === 'daily') {
+                    setSelectedDate(latestDate.toISOString().split('T')[0])
+                  } else if (view === 'weekly') {
+                    const start = new Date(latestDate)
+                    start.setDate(latestDate.getDate() - latestDate.getDay())
+                    setSelectedWeekStart(start.toISOString().split('T')[0])
+                  } else {
+                    setSelectedMonth(`${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, '0')}`)
+                  }
+                }}
+                  className={`px-3 py-1 rounded text-sm capitalize ${timeView === view ? 'bg-purple-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {view}
+                </button>
+              ))}
             </div>
 
             {(() => {
               const now = new Date()
-              const filtered = allExpenses.filter((e) => {
-                if (timeRange === 'all') return true
-                const expDate = new Date(e.date)
-                const months = timeRange === '3m' ? 3 : timeRange === '6m' ? 6 : 12
-                const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate())
-                return expDate >= cutoff
-              })
+              const allExpensesWithDate = allExpenses.map(e => ({ ...e, dateObj: new Date(e.date) }))
+              
+              // Initialize selected period on first load
+              if (allExpensesWithDate.length > 0) {
+                const latestExpense = allExpensesWithDate.reduce((max, e) => e.dateObj > max.dateObj ? e : max)
+                const latestDate = latestExpense.dateObj
+                
+                if (timeView === 'daily' && !selectedDate) {
+                  setSelectedDate(latestDate.toISOString().split('T')[0])
+                } else if (timeView === 'weekly' && !selectedWeekStart) {
+                  const start = new Date(latestDate)
+                  start.setDate(latestDate.getDate() - latestDate.getDay())
+                  setSelectedWeekStart(start.toISOString().split('T')[0])
+                } else if (timeView === 'monthly' && !selectedMonth) {
+                  setSelectedMonth(`${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, '0')}`)
+                }
+              }
+
+              // Filter by selected period
+              const filtered = allExpensesWithDate.filter((e) => {
+                if (timeView === 'daily' && selectedDate) {
+                  return e.dateObj.toISOString().split('T')[0] === selectedDate
+                } else if (timeView === 'weekly' && selectedWeekStart) {
+                  const weekStart = new Date(selectedWeekStart)
+                  const weekEnd = new Date(weekStart)
+                  weekEnd.setDate(weekEnd.getDate() + 7)
+                  return e.dateObj >= weekStart && e.dateObj < weekEnd
+                } else if (timeView === 'monthly' && selectedMonth) {
+                  const [year, month] = selectedMonth.split('-').map(Number)
+                  return e.dateObj.getFullYear() === year && e.dateObj.getMonth() + 1 === month
+                }
+                return true
+              }).map(({ dateObj, ...e }) => e)
+
+              // Get period label
+              const getPeriodLabel = () => {
+                if (timeView === 'daily' && selectedDate) {
+                  return new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                } else if (timeView === 'weekly' && selectedWeekStart) {
+                  const start = new Date(selectedWeekStart)
+                  const end = new Date(start)
+                  end.setDate(end.getDate() + 6)
+                  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                } else if (timeView === 'monthly' && selectedMonth) {
+                  const [year, month] = selectedMonth.split('-').map(Number)
+                  return new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                }
+                return ''
+              }
+
+              // Get all unique periods for navigation
+              const getAllPeriods = () => {
+                const periods = new Set<string>()
+                for (const e of allExpenses) {
+                  const d = new Date(e.date)
+                  if (timeView === 'daily') {
+                    periods.add(d.toISOString().split('T')[0])
+                  } else if (timeView === 'weekly') {
+                    const start = new Date(d)
+                    start.setDate(d.getDate() - d.getDay())
+                    periods.add(start.toISOString().split('T')[0])
+                  } else {
+                    periods.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+                  }
+                }
+                return Array.from(periods).sort().reverse()
+              }
+
+              const allPeriods = getAllPeriods()
+              const currentPeriodIndex = timeView === 'daily' ? allPeriods.indexOf(selectedDate) : timeView === 'weekly' ? allPeriods.indexOf(selectedWeekStart) : allPeriods.indexOf(selectedMonth)
+
+              const goToPeriod = (index: number) => {
+                if (index < 0 || index >= allPeriods.length) return
+                const period = allPeriods[index]
+                if (timeView === 'daily') setSelectedDate(period)
+                else if (timeView === 'weekly') setSelectedWeekStart(period)
+                else setSelectedMonth(period)
+              }
 
               const myShares = filtered.map((e) => {
                 const mySplit = e.expense_splits?.find((s: any) => s.user_id === user?.id)
@@ -513,32 +591,6 @@ export default function Dashboard() {
                 }
               })
 
-              // Time grouping
-              const getKey = (dateStr: string) => {
-                const d = new Date(dateStr)
-                if (timeView === 'daily') return d.toLocaleDateString()
-                if (timeView === 'weekly') {
-                  const start = new Date(d)
-                  start.setDate(d.getDate() - d.getDay())
-                  return `Week of ${start.toLocaleDateString()}`
-                }
-                return `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`
-              }
-
-              const timeGroups: Record<string, number> = {}
-              for (const e of myShares) {
-                const key = getKey(e.date)
-                if (!timeGroups[key]) timeGroups[key] = 0
-                timeGroups[key] += e.myShare
-              }
-
-              const timeSorted = Object.entries(timeGroups).sort((a, b) => {
-                const dateA = new Date(a[0].replace('Week of ', ''))
-                const dateB = new Date(b[0].replace('Week of ', ''))
-                return dateA.getTime() - dateB.getTime()
-              })
-
-              const maxTime = Math.max(...timeSorted.map(([, v]) => v), 1)
 
               // Category breakdown
               const categoryTotals: Record<string, number> = {}
@@ -583,6 +635,24 @@ export default function Dashboard() {
 
               return (
                 <>
+                  {/* Period header with navigation */}
+                  <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                    <div className="flex justify-between items-center">
+                      <button onClick={() => goToPeriod(currentPeriodIndex + 1)} disabled={currentPeriodIndex >= allPeriods.length - 1}
+                        className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        ← Previous
+                      </button>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500 mb-1">Showing stats for:</p>
+                        <p className="text-lg font-semibold text-purple-700">{getPeriodLabel()}</p>
+                      </div>
+                      <button onClick={() => goToPeriod(currentPeriodIndex - 1)} disabled={currentPeriodIndex <= 0}
+                        className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Personal insights */}
                   <div className="grid grid-cols-2 gap-4 mb-8">
                     <div className="border border-gray-200 rounded-lg p-4">
@@ -609,28 +679,14 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Spending over time */}
+                  {/* Spending Summary */}
                   <div className="mb-8">
-                    <h3 className="text-md font-semibold text-gray-700 mb-3">
-                      {timeView === 'daily' ? 'Daily' : timeView === 'weekly' ? 'Weekly' : 'Monthly'} Spending
-                    </h3>
-                    {timeSorted.length === 0 ? (
-                      <p className="text-gray-400 text-sm">No data yet.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {timeSorted.map(([label, amount]) => (
-                          <div key={label} className="flex items-center gap-3">
-                            <span className="text-xs text-gray-500 w-36 shrink-0 text-right">{label}</span>
-                            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                              <div className="bg-purple-500 h-full rounded-full flex items-center justify-end pr-2"
-                                style={{ width: `${Math.max((amount / maxTime) * 100, 8)}%` }}>
-                                <span className="text-xs text-white font-medium">${amount.toFixed(0)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <h3 className="text-md font-semibold text-gray-700 mb-3">Spending Summary</h3>
+                    <div className="border border-gray-200 rounded p-4">
+                      <p className="text-sm text-gray-500 mb-2">Total spent in this period</p>
+                      <p className="text-3xl font-bold text-purple-700">${myShares.reduce((acc, e) => acc + e.myShare, 0).toFixed(2)}</p>
+                      <p className="text-xs text-gray-400 mt-2">{myShares.length} expense{myShares.length !== 1 ? 's' : ''}</p>
+                    </div>
                   </div>
 
                   {/* Category breakdown */}
