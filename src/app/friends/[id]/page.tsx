@@ -52,12 +52,14 @@ export default function FriendDetail() {
         .select('*, profiles!paid_by(name, email), expense_splits(user_id, amount_owed, profiles(name, email))')
         .order('created_at', { ascending: false })
 
-      // Filter to expenses involving both you and the friend
+      // Filter to expenses involving both you and the friend.
+      // A payer with a zero share gets no expense_splits row, so the payer has to
+      // be added back in explicitly or those expenses drop out of the balance.
       const sharedExpenses = (allExpenses || []).filter((expense) => {
-        const involvedUsers = expense.expense_splits?.map((s: any) => s.user_id) || []
+        const involvedUsers = new Set<string>(expense.expense_splits?.map((s: any) => s.user_id) || [])
+        involvedUsers.add(expense.paid_by)
         const payerInvolved = expense.paid_by === currentUserId || expense.paid_by === friendId
-        const splitInvolved = involvedUsers.includes(currentUserId) && involvedUsers.includes(friendId)
-        return payerInvolved && splitInvolved
+        return payerInvolved && involvedUsers.has(currentUserId) && involvedUsers.has(friendId)
       })
 
       setExpenses(sharedExpenses)
