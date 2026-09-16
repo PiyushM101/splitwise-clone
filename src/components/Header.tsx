@@ -39,7 +39,7 @@ export default function Header() {
   }
 
   return (
-    <header className="border-b px-6 py-4 flex justify-between items-center gap-4">
+    <header className="sticky top-0 z-10 bg-white border-b px-6 py-4 flex justify-between items-center gap-4">
       <div className="flex flex-col">
         <a href="/" className="text-xl font-bold text-purple-700 leading-tight">Spendly</a>
         <span className="text-[11px] text-gray-400 leading-tight">
