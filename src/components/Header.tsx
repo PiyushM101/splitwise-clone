@@ -40,7 +40,7 @@ export default function Header() {
 
   return (
     <header className="border-b px-6 py-4 flex justify-between items-center">
-      <a href="/" className="text-xl font-bold text-purple-700">Splitwise Clone</a>
+      <a href="/" className="text-xl font-bold text-purple-700">Spendly</a>
       <nav className="space-x-4">
         {loggedIn ? (
           <>
