@@ -103,9 +103,9 @@ export default function Dashboard() {
         .select('group_id')
         .eq('user_id', currentUserId)
 
-      if (memberships && memberships.length > 0) {
-        const groupIds = memberships.map((m) => m.group_id)
+      const groupIds = (memberships || []).map((m) => m.group_id)
 
+      if (groupIds.length > 0) {
         const { data: groupList } = await supabase
           .from('groups')
           .select('*')
@@ -195,131 +195,133 @@ export default function Dashboard() {
             .filter((b) => b.amount !== 0)
         }
         setGroupBalances(groupBalResult)
-
-        // All expenses for balances and analytics
-        const { data: groupExpenses } = await supabase
-          .from('expenses')
-          .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
-          .in('group_id', groupIds)
-
-        // Expenses someone else created and paid for still count against you when
-        // you hold a split, so match on participation as well as authorship.
-        const { data: mySplits } = await supabase
-          .from('expense_splits')
-          .select('expense_id')
-          .eq('user_id', currentUserId)
-
-        const mySplitExpenseIds = [...new Set((mySplits || []).map((s) => s.expense_id))]
-
-        const friendExpenseFilters = [`created_by.eq.${currentUserId}`, `paid_by.eq.${currentUserId}`]
-        if (mySplitExpenseIds.length > 0) {
-          friendExpenseFilters.push(`id.in.(${mySplitExpenseIds.join(',')})`)
-        }
-
-        const { data: friendExpenses } = await supabase
-          .from('expenses')
-          .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
-          .is('group_id', null)
-          .or(friendExpenseFilters.join(','))
-
-        const expenses = [...(groupExpenses || []), ...(friendExpenses || [])]
-        setAllExpenses(expenses)
-
-        const { data: settlements } = await supabase
-          .from('settlements')
-          .select('*')
-
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name, email')
-
-        const nameMap: Record<string, string> = {}
-        if (profiles) {
-          for (const p of profiles) nameMap[p.id] = p.name || p.email
-        }
-
-        const netDebts: Record<string, Record<string, number>> = {}
-        for (const expense of expenses) {
-          const currency = expense.currency
-          if (!netDebts[currency]) netDebts[currency] = {}
-          for (const split of expense.expense_splits || []) {
-            if (split.user_id === expense.paid_by) continue
-            const amount = parseFloat(split.amount_owed)
-            if (split.user_id === currentUserId) {
-              if (!netDebts[currency][expense.paid_by]) netDebts[currency][expense.paid_by] = 0
-              netDebts[currency][expense.paid_by] += amount
-            } else if (expense.paid_by === currentUserId) {
-              if (!netDebts[currency][split.user_id]) netDebts[currency][split.user_id] = 0
-              netDebts[currency][split.user_id] -= amount
-            }
-          }
-        }
-
-        for (const settlement of (settlements || [])) {
-          const currency = settlement.currency
-          if (!netDebts[currency]) netDebts[currency] = {}
-          const amount = parseFloat(settlement.amount)
-          if (settlement.paid_by === currentUserId) {
-            if (!netDebts[currency][settlement.paid_to]) netDebts[currency][settlement.paid_to] = 0
-            netDebts[currency][settlement.paid_to] -= amount
-          } else if (settlement.paid_to === currentUserId) {
-            if (!netDebts[currency][settlement.paid_by]) netDebts[currency][settlement.paid_by] = 0
-            netDebts[currency][settlement.paid_by] += amount
-          }
-        }
-
-        const oweMap: Record<string, number> = {}
-        const owedMap: Record<string, number> = {}
-        const friendMap: Record<string, { currency: string; amount: number }[]> = {}
-
-        for (const currency of Object.keys(netDebts)) {
-          for (const [personId, net] of Object.entries(netDebts[currency])) {
-            const rounded = Math.round(net * 100) / 100
-            if (rounded === 0) continue
-            if (!friendMap[personId]) friendMap[personId] = []
-            if (rounded > 0) {
-              if (!oweMap[currency]) oweMap[currency] = 0
-              oweMap[currency] += rounded
-              friendMap[personId].push({ currency, amount: rounded })
-            } else {
-              if (!owedMap[currency]) owedMap[currency] = 0
-              owedMap[currency] += Math.abs(rounded)
-              friendMap[personId].push({ currency, amount: rounded })
-            }
-          }
-        }
-
-        setYouOwe(Object.entries(oweMap).map(([currency, amount]) => ({ currency, amount })))
-        setOwedToYou(Object.entries(owedMap).map(([currency, amount]) => ({ currency, amount })))
-
-        const lastActivityMap: Record<string, string> = {}
-        for (const expense of expenses) {
-          for (const split of expense.expense_splits || []) {
-            const otherId = split.user_id === currentUserId ? expense.paid_by : split.user_id
-            if (otherId === currentUserId) continue
-            if (!lastActivityMap[otherId] || expense.created_at > lastActivityMap[otherId]) {
-              lastActivityMap[otherId] = expense.created_at
-            }
-          }
-        }
-        for (const settlement of (settlements || [])) {
-          const otherId = settlement.paid_by === currentUserId ? settlement.paid_to : settlement.paid_by
-          if (!lastActivityMap[otherId] || settlement.created_at > lastActivityMap[otherId]) {
-            lastActivityMap[otherId] = settlement.created_at
-          }
-        }
-
-        const friends: FriendBalance[] = Object.entries(friendMap)
-          .filter(([, amounts]) => amounts.some((a) => Math.abs(a.amount) > 0))
-          .map(([userId, amounts]) => ({
-            userId,
-            name: nameMap[userId] || 'Unknown',
-            amounts,
-            lastActivity: lastActivityMap[userId] || '1970-01-01',
-          }))
-
-        setFriendBalances(friends)
       }
+
+      // All expenses for balances and analytics
+      const { data: groupExpenses } = groupIds.length > 0
+        ? await supabase
+            .from('expenses')
+            .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
+            .in('group_id', groupIds)
+        : { data: [] }
+
+      // Expenses someone else created and paid for still count against you when
+      // you hold a split, so match on participation as well as authorship.
+      const { data: mySplits } = await supabase
+        .from('expense_splits')
+        .select('expense_id')
+        .eq('user_id', currentUserId)
+
+      const mySplitExpenseIds = [...new Set((mySplits || []).map((s) => s.expense_id))]
+
+      const friendExpenseFilters = [`created_by.eq.${currentUserId}`, `paid_by.eq.${currentUserId}`]
+      if (mySplitExpenseIds.length > 0) {
+        friendExpenseFilters.push(`id.in.(${mySplitExpenseIds.join(',')})`)
+      }
+
+      const { data: friendExpenses } = await supabase
+        .from('expenses')
+        .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
+        .is('group_id', null)
+        .or(friendExpenseFilters.join(','))
+
+      const expenses = [...(groupExpenses || []), ...(friendExpenses || [])]
+      setAllExpenses(expenses)
+
+      const { data: settlements } = await supabase
+        .from('settlements')
+        .select('*')
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+
+      const nameMap: Record<string, string> = {}
+      if (profiles) {
+        for (const p of profiles) nameMap[p.id] = p.name || p.email
+      }
+
+      const netDebts: Record<string, Record<string, number>> = {}
+      for (const expense of expenses) {
+        const currency = expense.currency
+        if (!netDebts[currency]) netDebts[currency] = {}
+        for (const split of expense.expense_splits || []) {
+          if (split.user_id === expense.paid_by) continue
+          const amount = parseFloat(split.amount_owed)
+          if (split.user_id === currentUserId) {
+            if (!netDebts[currency][expense.paid_by]) netDebts[currency][expense.paid_by] = 0
+            netDebts[currency][expense.paid_by] += amount
+          } else if (expense.paid_by === currentUserId) {
+            if (!netDebts[currency][split.user_id]) netDebts[currency][split.user_id] = 0
+            netDebts[currency][split.user_id] -= amount
+          }
+        }
+      }
+
+      for (const settlement of (settlements || [])) {
+        const currency = settlement.currency
+        if (!netDebts[currency]) netDebts[currency] = {}
+        const amount = parseFloat(settlement.amount)
+        if (settlement.paid_by === currentUserId) {
+          if (!netDebts[currency][settlement.paid_to]) netDebts[currency][settlement.paid_to] = 0
+          netDebts[currency][settlement.paid_to] -= amount
+        } else if (settlement.paid_to === currentUserId) {
+          if (!netDebts[currency][settlement.paid_by]) netDebts[currency][settlement.paid_by] = 0
+          netDebts[currency][settlement.paid_by] += amount
+        }
+      }
+
+      const oweMap: Record<string, number> = {}
+      const owedMap: Record<string, number> = {}
+      const friendMap: Record<string, { currency: string; amount: number }[]> = {}
+
+      for (const currency of Object.keys(netDebts)) {
+        for (const [personId, net] of Object.entries(netDebts[currency])) {
+          const rounded = Math.round(net * 100) / 100
+          if (rounded === 0) continue
+          if (!friendMap[personId]) friendMap[personId] = []
+          if (rounded > 0) {
+            if (!oweMap[currency]) oweMap[currency] = 0
+            oweMap[currency] += rounded
+            friendMap[personId].push({ currency, amount: rounded })
+          } else {
+            if (!owedMap[currency]) owedMap[currency] = 0
+            owedMap[currency] += Math.abs(rounded)
+            friendMap[personId].push({ currency, amount: rounded })
+          }
+        }
+      }
+
+      setYouOwe(Object.entries(oweMap).map(([currency, amount]) => ({ currency, amount })))
+      setOwedToYou(Object.entries(owedMap).map(([currency, amount]) => ({ currency, amount })))
+
+      const lastActivityMap: Record<string, string> = {}
+      for (const expense of expenses) {
+        for (const split of expense.expense_splits || []) {
+          const otherId = split.user_id === currentUserId ? expense.paid_by : split.user_id
+          if (otherId === currentUserId) continue
+          if (!lastActivityMap[otherId] || expense.created_at > lastActivityMap[otherId]) {
+            lastActivityMap[otherId] = expense.created_at
+          }
+        }
+      }
+      for (const settlement of (settlements || [])) {
+        const otherId = settlement.paid_by === currentUserId ? settlement.paid_to : settlement.paid_by
+        if (!lastActivityMap[otherId] || settlement.created_at > lastActivityMap[otherId]) {
+          lastActivityMap[otherId] = settlement.created_at
+        }
+      }
+
+      const friends: FriendBalance[] = Object.entries(friendMap)
+        .filter(([, amounts]) => amounts.some((a) => Math.abs(a.amount) > 0))
+        .map(([userId, amounts]) => ({
+          userId,
+          name: nameMap[userId] || 'Unknown',
+          amounts,
+          lastActivity: lastActivityMap[userId] || '1970-01-01',
+        }))
+
+      setFriendBalances(friends)
 
       setLoading(false)
     }
