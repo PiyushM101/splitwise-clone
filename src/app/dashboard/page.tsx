@@ -202,11 +202,25 @@ export default function Dashboard() {
           .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
           .in('group_id', groupIds)
 
+        // Expenses someone else created and paid for still count against you when
+        // you hold a split, so match on participation as well as authorship.
+        const { data: mySplits } = await supabase
+          .from('expense_splits')
+          .select('expense_id')
+          .eq('user_id', currentUserId)
+
+        const mySplitExpenseIds = [...new Set((mySplits || []).map((s) => s.expense_id))]
+
+        const friendExpenseFilters = [`created_by.eq.${currentUserId}`, `paid_by.eq.${currentUserId}`]
+        if (mySplitExpenseIds.length > 0) {
+          friendExpenseFilters.push(`id.in.(${mySplitExpenseIds.join(',')})`)
+        }
+
         const { data: friendExpenses } = await supabase
           .from('expenses')
           .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
           .is('group_id', null)
-          .or(`created_by.eq.${currentUserId},paid_by.eq.${currentUserId}`)
+          .or(friendExpenseFilters.join(','))
 
         const expenses = [...(groupExpenses || []), ...(friendExpenses || [])]
         setAllExpenses(expenses)
