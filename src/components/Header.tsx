@@ -39,9 +39,14 @@ export default function Header() {
   }
 
   return (
-    <header className="border-b px-6 py-4 flex justify-between items-center">
-      <a href="/" className="text-xl font-bold text-purple-700">Spendly</a>
-      <nav className="space-x-4">
+    <header className="border-b px-6 py-4 flex justify-between items-center gap-4">
+      <div className="flex flex-col">
+        <a href="/" className="text-xl font-bold text-purple-700 leading-tight">Spendly</a>
+        <span className="text-[11px] text-gray-400 leading-tight">
+          Prototype developed by Piyush M, MBA NYU Stern Class of 2027
+        </span>
+      </div>
+      <nav className="space-x-4 shrink-0">
         {loggedIn ? (
           <>
             <a href="/dashboard" className="text-purple-600 hover:text-purple-800">Dashboard</a>
