@@ -298,7 +298,10 @@ export default function GroupDetail() {
 
   const displayBalances = showSimplified ? simplifiedBalances : balances
 
-  const AddMemberForm = () => (
+  // Held as an element, not a component: declaring a component in the render
+  // body gives it a new type on every render, which remounts the input below
+  // and drops focus mid-typing.
+  const addMemberForm = (
     <div className="mb-6">
       <form onSubmit={handleAddMember}>
         {selectedPerson ? (
@@ -574,7 +577,7 @@ export default function GroupDetail() {
         {/* Members tab */}
         {activeTab === 'members' && (
           <div>
-            <AddMemberForm />
+            {addMemberForm}
 
             <ul className="space-y-2">
               {members.map((member, index) => {
