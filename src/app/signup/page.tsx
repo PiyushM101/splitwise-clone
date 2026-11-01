@@ -1,10 +1,12 @@
 'use client'
 import { supabase } from '@/lib/supabase'
+import { USERNAME_RULES, isUsernameTaken, normalizeUsername, validateUsername } from '@/lib/username'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function SignUp() {
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
@@ -16,11 +18,24 @@ export default function SignUp() {
     setLoading(true)
     setError('')
 
+    const invalid = validateUsername(username)
+    if (invalid) {
+      setError(invalid)
+      setLoading(false)
+      return
+    }
+
+    if (await isUsernameTaken(username)) {
+      setError('That username is taken. Try another.')
+      setLoading(false)
+      return
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { name },
+        data: { name, username: normalizeUsername(username) },
       },
     })
 
@@ -49,6 +64,21 @@ export default function SignUp() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="e.g. piyush_m"
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <p className="text-xs text-gray-400 mt-1">{USERNAME_RULES}</p>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
           <input
             type="email"
@@ -57,6 +87,7 @@ export default function SignUp() {
             required
             className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
+          <p className="text-xs text-gray-400 mt-1">Used to recover your account. Friends find you by username.</p>
         </div>
 
         <div>

@@ -24,7 +24,7 @@ export default function FriendsPage() {
 
     const { data: allFriendships } = await supabase
       .from('friendships')
-      .select('*, user:profiles!user_id(id, name, email), friend:profiles!friend_id(id, name, email)')
+      .select('*, user:profiles!user_id(id, name, username), friend:profiles!friend_id(id, name, username)')
       .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
 
     const accepted: any[] = []
@@ -66,9 +66,9 @@ export default function FriendsPage() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, name, username')
         .neq('id', session.user.id)
-        .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
+        .or(`username.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
         .limit(5)
 
       const friendIds = friends.map((f) => f.id)
@@ -185,7 +185,7 @@ export default function FriendsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => { if (searchResults.length > 0) setShowResults(true) }}
-              placeholder="Search by name or email (min 3 characters)"
+              placeholder="Search by username, name or email (min 3 characters)"
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             {showResults && searchResults.length > 0 && (
@@ -197,7 +197,7 @@ export default function FriendsPage() {
                   >
                     <div>
                       <p className="text-sm font-medium text-gray-800">{person.name}</p>
-                      <p className="text-xs text-gray-400">{person.email}</p>
+                      <p className="text-xs text-gray-400">{person.username ? `@${person.username}` : ''}</p>
                     </div>
                     <button
                       onClick={() => sendRequest(person.id)}
@@ -233,7 +233,7 @@ export default function FriendsPage() {
                 <li key={req.id} className="border border-purple-200 bg-purple-50 rounded-lg p-4 flex justify-between items-center">
                   <div>
                     <p className="font-medium text-gray-800">{req.user?.name}</p>
-                    <p className="text-xs text-gray-400">{req.user?.email}</p>
+                    <p className="text-xs text-gray-400">{req.user?.username ? `@${req.user.username}` : ''}</p>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -263,7 +263,7 @@ export default function FriendsPage() {
                 <li key={req.id} className="border border-gray-200 rounded-lg p-4 flex justify-between items-center">
                   <div>
                     <p className="font-medium text-gray-800">{req.friend?.name}</p>
-                    <p className="text-xs text-gray-400">{req.friend?.email}</p>
+                    <p className="text-xs text-gray-400">{req.friend?.username ? `@${req.friend.username}` : ''}</p>
                   </div>
                   <span className="text-xs text-gray-400">Pending</span>
                 </li>
@@ -282,7 +282,7 @@ export default function FriendsPage() {
                 <li key={friend.id} className="border border-gray-200 rounded-lg p-4 flex justify-between items-center">
                   <a href={`/friends/${friend.id}`} className="hover:text-purple-700">
                     <p className="font-medium text-gray-800">{friend.name}</p>
-                    <p className="text-xs text-gray-400">{friend.email}</p>
+                    <p className="text-xs text-gray-400">{friend.username ? `@${friend.username}` : ''}</p>
                   </a>
                   <button
                     onClick={() => removeFriend(friend.id)}

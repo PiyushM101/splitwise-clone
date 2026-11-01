@@ -39,7 +39,7 @@ const CURRENCIES = [
 const getSymbol = (code: string) => CURRENCIES.find((c) => c.code === code)?.symbol || code
 
 type SplitMethod = 'equal' | 'exact' | 'percentage' | 'shares' | 'adjustments'
-type Person = { id: string; name: string; email: string }
+type Person = { id: string; name: string; username: string | null }
 
 export default function NewFriendExpense() {
   const router = useRouter()
@@ -84,7 +84,7 @@ export default function NewFriendExpense() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, name, username')
         .eq('id', session.user.id)
         .single()
 
@@ -171,9 +171,9 @@ export default function NewFriendExpense() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, name, username')
         .in('id', allKnownIds)
-        .or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`)
+        .or(`username.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
         .limit(5)
 
       const filtered = (data || []).filter((p) => !selectedIds.includes(p.id))
@@ -203,7 +203,7 @@ export default function NewFriendExpense() {
     }
   }
 
-  const getName = (person: Person) => person.name || person.email
+  const getName = (person: Person) => person.name || person.username
 
   const calculateSplits = (): { userId: string; amountOwed: number }[] | null => {
     const totalAmount = parseFloat(amount)
@@ -405,7 +405,7 @@ export default function NewFriendExpense() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
-              placeholder="Search by name or email"
+              placeholder="Search by username, name or email"
               className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
             {showSuggestions && suggestions.length > 0 && (
@@ -418,7 +418,7 @@ export default function NewFriendExpense() {
                     className="w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
                   >
                     <p className="text-sm font-medium text-gray-800">{person.name}</p>
-                    <p className="text-xs text-gray-400">{person.email}</p>
+                    <p className="text-xs text-gray-400">{person.username ? `@${person.username}` : ''}</p>
                   </button>
                 ))}
               </div>

@@ -40,7 +40,7 @@ export default function FriendDetail() {
       // Get friend profile
       const { data: friendData } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, name, username')
         .eq('id', friendId)
         .single()
 
@@ -49,7 +49,7 @@ export default function FriendDetail() {
       // Get all expenses where both you and the friend are involved
       const { data: allExpenses } = await supabase
         .from('expenses')
-        .select('*, profiles!paid_by(name, email), expense_splits(user_id, amount_owed, profiles(name, email))')
+        .select('*, profiles!paid_by(name, username), expense_splits(user_id, amount_owed, profiles(name, username))')
         .order('created_at', { ascending: false })
 
       // Filter to expenses involving both you and the friend.
@@ -91,7 +91,7 @@ export default function FriendDetail() {
       // Get settlements between you and friend
       const { data: settlementData } = await supabase
         .from('settlements')
-        .select('*, payer:profiles!paid_by(name, email), payee:profiles!paid_to(name, email)')
+        .select('*, payer:profiles!paid_by(name, username), payee:profiles!paid_to(name, username)')
 
       for (const settlement of (settlementData || [])) {
         const currency = settlement.currency
@@ -132,7 +132,7 @@ export default function FriendDetail() {
         <a href="/dashboard" className="text-purple-600 hover:underline text-sm">&larr; Back to Dashboard</a>
 
         <h1 className="text-2xl font-bold text-purple-700 mt-4 mb-2">{friend.name}</h1>
-        <p className="text-gray-400 text-sm mb-6">{friend.email}</p>
+        <p className="text-gray-400 text-sm mb-6">{friend.username ? `@${friend.username}` : ''}</p>
 
         {/* Balance summary */}
         <div className="border border-gray-200 rounded p-4 mb-8">
@@ -176,8 +176,8 @@ export default function FriendDetail() {
             <ul className="space-y-3">
               {activity.map((item) => {
                 if (item.type === 'settlement') {
-                  const payerName = (item as any).payer?.name || (item as any).payer?.email || 'Unknown'
-                  const payeeName = (item as any).payee?.name || (item as any).payee?.email || 'Unknown'
+                  const payerName = (item as any).payer?.name || (item as any).payer?.username || 'Unknown'
+                  const payeeName = (item as any).payee?.name || (item as any).payee?.username || 'Unknown'
                   const symbol = getSymbol(item.currency)
 
                   return (
@@ -202,7 +202,7 @@ export default function FriendDetail() {
                 }
 
                 const expense = item
-                const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
+                const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.username || 'Unknown'
                 const symbol = getSymbol(expense.currency)
 
                 return (
@@ -231,7 +231,7 @@ export default function FriendDetail() {
                             key={split.user_id}
                             className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded"
                           >
-                            {split.profiles?.name || split.profiles?.email}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
+                            {split.profiles?.name || split.profiles?.username}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
                           </span>
                         ))}
                       </div>

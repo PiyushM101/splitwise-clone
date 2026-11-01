@@ -8,13 +8,29 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const check = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         router.push('/login')
-      } else {
-        setLoading(false)
+        return
       }
-    })
+
+      // Accounts that predate usernames have to pick one before going further.
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', session.user.id)
+        .single()
+
+      if (!profile?.username) {
+        router.push('/onboarding/username')
+        return
+      }
+
+      setLoading(false)
+    }
+
+    check()
   }, [router])
 
   if (loading) return <p className="p-8">Loading...</p>

@@ -1,19 +1,50 @@
 'use client'
 import { supabase } from '@/lib/supabase'
+import { normalizeUsername } from '@/lib/username'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
+  // Supabase signs in with an email, so a username has to be resolved to one
+  // first. Anything containing '@' is treated as an email already, which keeps
+  // existing accounts working while everyone picks a username.
+  const resolveEmail = async (value: string) => {
+    if (value.includes('@')) return value.trim()
+
+    const { data, error } = await supabase.rpc('get_login_email', {
+      p_username: normalizeUsername(value),
+    })
+
+    if (error) throw error
+
+    return data as string | null
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    let email: string | null
+    try {
+      email = await resolveEmail(identifier)
+    } catch {
+      setError('Could not reach the server. Try again.')
+      setLoading(false)
+      return
+    }
+
+    if (!email) {
+      setError('Invalid login credentials')
+      setLoading(false)
+      return
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -34,14 +65,17 @@ export default function Login() {
 
       <form onSubmit={handleLogin} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
+            autoCapitalize="none"
+            autoCorrect="off"
             className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
+          <p className="text-xs text-gray-400 mt-1">You can still use your email address.</p>
         </div>
 
         <div>

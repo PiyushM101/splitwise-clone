@@ -95,7 +95,7 @@ export default function GroupDetail() {
   const simplifyDebts = (balances: Balance[], members: any[]): Balance[] => {
     const nameMap: Record<string, string> = {}
     for (const m of members) {
-      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.username || 'Unknown'
     }
     const byCurrency: Record<string, Balance[]> = {}
     for (const b of balances) {
@@ -143,7 +143,7 @@ export default function GroupDetail() {
   const calculateSpending = (expenses: any[], members: any[]) => {
     const nameMap: Record<string, string> = {}
     for (const m of members) {
-      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+      nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.username || 'Unknown'
     }
     const totals: Record<string, number> = {}
     for (const expense of expenses) {
@@ -202,7 +202,7 @@ export default function GroupDetail() {
       }
     }
     const nameMap: Record<string, string> = {}
-    for (const m of members) nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+    for (const m of members) nameMap[m.user_id] = (m.profiles as any)?.name || (m.profiles as any)?.username || 'Unknown'
 
     const result: Balance[] = []
     for (const currency of Object.keys(debtsByCurrency)) {
@@ -226,10 +226,10 @@ export default function GroupDetail() {
   const fetchGroup = async () => {
     const { data: groupData } = await supabase.from('groups').select('*').eq('id', groupId).single()
     setGroup(groupData)
-    const { data: memberData } = await supabase.from('group_members').select('user_id, joined_at, profiles(name, email)').eq('group_id', groupId)
+    const { data: memberData } = await supabase.from('group_members').select('user_id, joined_at, profiles(name, username)').eq('group_id', groupId)
     setMembers(memberData || [])
-    const { data: expenseData } = await supabase.from('expenses').select('*, profiles!paid_by(name, email), expense_splits(user_id, amount_owed, profiles(name, email))').eq('group_id', groupId).order('created_at', { ascending: false })
-    const { data: settlementData } = await supabase.from('settlements').select('*, payer:profiles!paid_by(name, email), payee:profiles!paid_to(name, email)').eq('group_id', groupId)
+    const { data: expenseData } = await supabase.from('expenses').select('*, profiles!paid_by(name, username), expense_splits(user_id, amount_owed, profiles(name, username))').eq('group_id', groupId).order('created_at', { ascending: false })
+    const { data: settlementData } = await supabase.from('settlements').select('*, payer:profiles!paid_by(name, username), payee:profiles!paid_to(name, username)').eq('group_id', groupId)
     setExpenses(expenseData || [])
     setSettlements(settlementData || [])
     calculateBalances(expenseData || [], memberData || [], settlementData || [])
@@ -256,7 +256,7 @@ export default function GroupDetail() {
       }
       const allKnownIds = [...new Set([...friendIds, ...groupMemberIds])]
       if (allKnownIds.length === 0) { setSuggestions([]); return }
-      const { data } = await supabase.from('profiles').select('id, name, email').in('id', allKnownIds).or(`email.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%`).limit(5)
+      const { data } = await supabase.from('profiles').select('id, name, username').in('id', allKnownIds).or(`username.ilike.%${searchQuery}%,name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`).limit(5)
       setSuggestions((data || []).filter((p) => !memberIds.includes(p.id)))
       setShowSuggestions(true)
     }
@@ -268,11 +268,18 @@ export default function GroupDetail() {
     e.preventDefault()
     setError(''); setSuccess('')
     let profileId = selectedPerson?.id
-    let profileEmail = selectedPerson?.email
+    let profileLabel = selectedPerson?.username || selectedPerson?.name
     if (!profileId && searchQuery) {
-      const { data: profile } = await supabase.from('profiles').select('id, email').eq('email', searchQuery).single()
-      if (!profile) { setError('No user found with that email.'); return }
-      profileId = profile.id; profileEmail = profile.email
+      // A typed-in value is a username unless it looks like an email address.
+      const typed = searchQuery.trim()
+      const byEmail = typed.includes('@')
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, name, username')
+        .eq(byEmail ? 'email' : 'username', byEmail ? typed : typed.toLowerCase())
+        .single()
+      if (!profile) { setError('No user found with that username or email.'); return }
+      profileId = profile.id; profileLabel = profile.username || profile.name
     }
     if (!profileId) { setError('Select a person to add.'); return }
     if (members.some((m) => m.user_id === profileId)) { setError('Already in the group.'); return }
@@ -281,7 +288,7 @@ export default function GroupDetail() {
     const { ensureFriendshipsWithAll } = await import('@/lib/friends')
     const memberIds = members.map((m) => m.user_id)
     await ensureFriendshipsWithAll(profileId, memberIds)
-    setSuccess(`Added ${profileEmail} to the group!`)
+    setSuccess(`Added ${profileLabel} to the group!`)
     setSearchQuery(''); setSelectedPerson(null); setShowSuggestions(false)
     fetchGroup()
   }
@@ -299,7 +306,7 @@ export default function GroupDetail() {
             <div className="flex-1 flex items-center justify-between border border-purple-300 bg-purple-50 rounded px-3 py-2">
               <div>
                 <span className="font-medium text-purple-700">{selectedPerson.name}</span>
-                <span className="text-gray-400 text-sm ml-2">{selectedPerson.email}</span>
+                <span className="text-gray-400 text-sm ml-2">{selectedPerson.username ? `@${selectedPerson.username}` : ''}</span>
               </div>
               <button type="button" onClick={() => { setSelectedPerson(null); setSearchQuery('') }} className="text-gray-400 hover:text-red-500 text-sm">✕</button>
             </div>
@@ -313,7 +320,7 @@ export default function GroupDetail() {
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setSelectedPerson(null) }}
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
-                placeholder="Search by name or email to add"
+                placeholder="Search by username, name or email to add"
                 className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <button type="submit" className="bg-purple-700 text-white px-4 py-2 rounded hover:bg-purple-800">Add</button>
@@ -321,10 +328,10 @@ export default function GroupDetail() {
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
                 {suggestions.map((person) => (
-                  <button key={person.id} type="button" onClick={() => { setSelectedPerson(person); setSearchQuery(person.email); setShowSuggestions(false) }}
+                  <button key={person.id} type="button" onClick={() => { setSelectedPerson(person); setSearchQuery(person.username); setShowSuggestions(false) }}
                     className="w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0">
                     <p className="text-sm font-medium text-gray-800">{person.name}</p>
-                    <p className="text-xs text-gray-400">{person.email}</p>
+                    <p className="text-xs text-gray-400">{person.username ? `@${person.username}` : ''}</p>
                   </button>
                 ))}
               </div>
@@ -499,8 +506,8 @@ export default function GroupDetail() {
                 <ul className="space-y-3">
                   {activity.map((item) => {
                     if (item.type === 'settlement') {
-                      const payerName = (item as any).payer?.name || (item as any).payer?.email || 'Unknown'
-                      const payeeName = (item as any).payee?.name || (item as any).payee?.email || 'Unknown'
+                      const payerName = (item as any).payer?.name || (item as any).payer?.username || 'Unknown'
+                      const payeeName = (item as any).payee?.name || (item as any).payee?.username || 'Unknown'
                       const symbol = getSymbol(item.currency)
                       return (
                         <li key={item.id} className="border border-purple-200 bg-purple-50 rounded-lg p-4">
@@ -522,7 +529,7 @@ export default function GroupDetail() {
                     }
 
                     const expense = item
-                    const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.email || 'Unknown'
+                    const payer = (expense.profiles as any)?.name || (expense.profiles as any)?.username || 'Unknown'
                     const symbol = getSymbol(expense.currency)
 
                     return (
@@ -550,7 +557,7 @@ export default function GroupDetail() {
                           <div className="flex flex-wrap gap-2">
                             {expense.expense_splits?.map((split: any) => (
                               <span key={split.user_id} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full">
-                                {split.profiles?.name || split.profiles?.email}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
+                                {split.profiles?.name || split.profiles?.username}: {symbol}{parseFloat(split.amount_owed).toFixed(2)}
                               </span>
                             ))}
                           </div>
@@ -572,7 +579,7 @@ export default function GroupDetail() {
             <ul className="space-y-2">
               {members.map((member, index) => {
                 const name = (member.profiles as any)?.name || 'Unknown'
-                const email = (member.profiles as any)?.email || ''
+                const username = (member.profiles as any)?.username || ''
                 return (
                   <li key={member.user_id} className="border border-gray-200 rounded-lg p-4 flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-full ${getColor(index)} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
@@ -580,7 +587,7 @@ export default function GroupDetail() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-800">{name}</p>
-                      <p className="text-xs text-gray-400">{email}</p>
+                      <p className="text-xs text-gray-400">{username ? `@${username}` : ''}</p>
                       <p className="text-xs text-gray-300">Joined {new Date(member.joined_at).toLocaleDateString()}</p>
                     </div>
                   </li>

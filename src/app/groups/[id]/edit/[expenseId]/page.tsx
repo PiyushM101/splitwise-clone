@@ -67,7 +67,7 @@ export default function EditExpense() {
   const fetchData = useCallback(async () => {
     const { data: memberData } = await supabase
       .from('group_members')
-      .select('user_id, profiles(id, name, email)')
+      .select('user_id, profiles(id, name, username)')
       .eq('group_id', groupId)
 
     if (memberData) {
@@ -164,7 +164,7 @@ export default function EditExpense() {
     }
   }
 
-  const getMemberName = (m: any) => (m.profiles as any)?.name || (m.profiles as any)?.email || 'Unknown'
+  const getMemberName = (m: any) => (m.profiles as any)?.name || (m.profiles as any)?.username || 'Unknown'
 
   const calculateSplits = (): { userId: string; amountOwed: number }[] | null => {
     const totalAmount = parseFloat(amount)

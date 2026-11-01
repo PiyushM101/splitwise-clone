@@ -201,7 +201,7 @@ export default function Dashboard() {
       const { data: groupExpenses } = groupIds.length > 0
         ? await supabase
             .from('expenses')
-            .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
+            .select('*, expense_splits(user_id, amount_owed, profiles(name, username))')
             .in('group_id', groupIds)
         : { data: [] }
 
@@ -221,7 +221,7 @@ export default function Dashboard() {
 
       const { data: friendExpenses } = await supabase
         .from('expenses')
-        .select('*, expense_splits(user_id, amount_owed, profiles(name, email))')
+        .select('*, expense_splits(user_id, amount_owed, profiles(name, username))')
         .is('group_id', null)
         .or(friendExpenseFilters.join(','))
 
@@ -234,11 +234,11 @@ export default function Dashboard() {
 
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, name, username')
 
       const nameMap: Record<string, string> = {}
       if (profiles) {
-        for (const p of profiles) nameMap[p.id] = p.name || p.email
+        for (const p of profiles) nameMap[p.id] = p.name || p.username
       }
 
       const netDebts: Record<string, Record<string, number>> = {}
@@ -366,7 +366,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <p className="text-gray-600 mb-6">Welcome, {user?.user_metadata?.name || user?.email}!</p>
+        <p className="text-gray-600 mb-6">Welcome, {user?.user_metadata?.name || user?.user_metadata?.username}!</p>
 
         {/* Tabs */}
         <div className="border-b mb-6">
@@ -457,7 +457,7 @@ export default function Dashboard() {
                         </div>
                         {friend.amounts.map((a) => (
                           <a key={`settle-${a.currency}`}
-                            href={`/friends/${friend.userId}/settle?from=${a.amount > 0 ? 'me' : friend.userId}&to=${a.amount > 0 ? friend.userId : 'me'}&fromName=${a.amount > 0 ? encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me') : encodeURIComponent(friend.name)}&toName=${a.amount > 0 ? encodeURIComponent(friend.name) : encodeURIComponent(user?.user_metadata?.name || user?.email || 'Me')}&amount=${Math.abs(a.amount).toFixed(2)}&currency=${a.currency}`}
+                            href={`/friends/${friend.userId}/settle?from=${a.amount > 0 ? 'me' : friend.userId}&to=${a.amount > 0 ? friend.userId : 'me'}&fromName=${a.amount > 0 ? encodeURIComponent(user?.user_metadata?.name || user?.user_metadata?.username || 'Me') : encodeURIComponent(friend.name)}&toName=${a.amount > 0 ? encodeURIComponent(friend.name) : encodeURIComponent(user?.user_metadata?.name || user?.user_metadata?.username || 'Me')}&amount=${Math.abs(a.amount).toFixed(2)}&currency=${a.currency}`}
                             className="text-xs bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600">
                             Settle Up
                           </a>
@@ -706,7 +706,7 @@ export default function Dashboard() {
               for (const e of filtered) {
                 for (const split of e.expense_splits || []) {
                   if (split.user_id === user?.id) continue
-                  const name = split.profiles?.name || split.profiles?.email || 'Unknown'
+                  const name = split.profiles?.name || split.profiles?.username || 'Unknown'
                   if (!friendTotals[split.user_id]) friendTotals[split.user_id] = { name, amount: 0 }
                   friendTotals[split.user_id].amount += parseFloat(split.amount_owed)
                 }
